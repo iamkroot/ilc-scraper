@@ -161,9 +161,8 @@ def main():
     working_dir: Path = args.dest / subject_name
     working_dir.mkdir(exist_ok=True, parents=True)
     print(f'Saving to "{working_dir!s}"')
-    if subject_name not in data["urls"]:
-        data["urls"][subject_name.upper()] = course_lectures_url
-        store_json(data, DATA_FILE)
+    data["urls"].setdefault(subject_name.upper(), course_lectures_url)
+    store_json(data, DATA_FILE)
     lecture_ids = parse_lec_ranges(args.range, total_lecs)
     if not args.force:
         downloaded: set = {
