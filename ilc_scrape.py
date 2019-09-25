@@ -65,6 +65,12 @@ def parse_args(config):
         "-p", "--password", required=not creds, default=creds.get("password")
     )
     parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force overwrite downloaded lectures.",
+    )
+    parser.add_argument(
         "-w", "--worker_processes", default=os.cpu_count() or 1, type=int
     )
     parser.add_argument(
@@ -159,12 +165,13 @@ def main():
         data["urls"][subject_name.upper()] = course_lectures_url
         store_json(data, DATA_FILE)
     lecture_ids = parse_lec_ranges(args.range, total_lecs)
-    downloaded: set = {
-        int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
-    } & lecture_ids
-    if downloaded:
-        print("Skipping already downloaded lectures:", *sorted(downloaded))
-    lecture_ids -= downloaded
+    if not args.force:
+        downloaded: set = {
+            int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
+        } & lecture_ids
+        if downloaded:
+            print("Skipping already downloaded lectures:", *sorted(downloaded))
+        lecture_ids -= downloaded
     if not lecture_ids:
         print("No lectures to download. Exiting.")
         return
