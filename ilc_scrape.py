@@ -157,7 +157,7 @@ def main():
     lectures = response.json()
     total_lecs = len(lectures)
 
-    subject_name = lectures[0]["subjectName"]
+    subject_name = lectures[0]["subjectName"] + " " + lectures[0]["sessionName"]
     working_dir: Path = args.dest / subject_name
     working_dir.mkdir(exist_ok=True, parents=True)
     print(f'Saving to "{working_dir!s}"')
@@ -184,7 +184,8 @@ def main():
 
             ttid = lecture["ttid"]
             title = lecture["topic"]
-            file_name = sanitize_filepath(f"{lec_no}. {title}.mkv")
+            date = lecture["startTime"][:10]
+            file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mp4")
             stream_url = impartus_stream.format(ttid, token)
             pool.apply_async(
                 download_stream, [stream_url, str(working_dir / file_name)]
