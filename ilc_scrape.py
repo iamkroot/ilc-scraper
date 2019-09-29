@@ -171,6 +171,11 @@ def get_lecture_url(data, name=None, course_url=None):
 
 
 def main():
+    try:
+        subprocess.check_call(["ffmpeg", "-version"])
+    except FileNotFoundError:
+        print("ffmpeg not found. Ensure it is present in PATH.")
+        quit(134)
     config = read_json(CONFIG_FILE, verbose=True)
     data = read_json(DATA_FILE) or {"urls": {}}
     args = parse_args(config)
