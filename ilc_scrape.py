@@ -14,10 +14,10 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = "imp_config.json"
 DATA_FILE = "imp_data.json"
-impartus_base = "http://172.16.3.20/"
-impartus_login = impartus_base + "api/auth/signin"
-impartus_stream = impartus_base + "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
-impartus_lectures = impartus_base + "api/subjects/{}/lectures/{}"
+IMP_BASE_URL = "http://172.16.3.20/"
+IMP_LOGIN_URL = IMP_BASE_URL + "api/auth/signin"
+IMP_STREAM_URL = IMP_BASE_URL + "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
+IMP_LECTURES_URL = IMP_BASE_URL + "api/subjects/{}/lectures/{}"
 
 VALID_CHARS = "-_.() " + string.ascii_letters + string.digits
 CATALOG_PAT = re.compile(
@@ -26,12 +26,18 @@ CATALOG_PAT = re.compile(
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")
 
 
-def read_json(file):
+def read_json(file, verbose=False):
     try:
         with open(SCRIPT_DIR / file) as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    except json.JSONDecodeError as e:
+        print("Error while reading", file)
+        print(e.msg)
+    except FileNotFoundError:
+        if verbose:
+            print(f"Couldn't find {SCRIPT_DIR / file}. Will skip for now.")
+        pass
+    return {}
 
 
 def store_json(data, file):
@@ -42,7 +48,7 @@ def store_json(data, file):
 def parse_args(config):
     creds = config.get("creds", {})
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "-n",
         "--name",
@@ -58,12 +64,8 @@ def parse_args(config):
         type=Path,
         help=f"Download folder (Default: {SCRIPT_DIR / 'Impartus Lectures'})",
     )
-    parser.add_argument(
-        "-u", "--username", required=not creds, default=creds.get("username")
-    )
-    parser.add_argument(
-        "-p", "--password", required=not creds, default=creds.get("password")
-    )
+    parser.add_argument("-u", "--username", default=creds.get("username"))
+    parser.add_argument("-p", "--password", default=creds.get("password"))
     parser.add_argument(
         "-f",
         "--force",
@@ -88,17 +90,24 @@ def parse_args(config):
             "Eg- '12, 4:6, 15:, :2' will download lectures 1, 4, 5, 12, 15, 16, 17, ..."
         ),
     )
+    parser.add_argument(
+        "-N",
+        "--no-interaction",
+        action="store_true",
+        dest='no_interact',
+        help="Don't prompt for any missing options (like ranges)",
+    )
     return parser.parse_args()
 
 
 def login(username, password):
     payload = {"username": username, "password": password}
 
-    response = requests.post(impartus_login, data=payload)
+    response = requests.post(IMP_LOGIN_URL, data=payload)
     if response.status_code != 200:
         print("Invalid username/password. Try again.")
         quit(128)
-    return response.json()["token"]  # It's JWT, yay!
+    return response.json()["token"]
 
 
 def sanitize_filepath(filename):
@@ -106,9 +115,14 @@ def sanitize_filepath(filename):
     return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
 
 
-def parse_lec_ranges(ranges: list, total_lecs: int) -> set:
+def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool=False) -> set:
     if not ranges:
-        return set(range(1, total_lecs + 1))
+        if not no_interact:
+            ranges = input(
+                "Enter ranges (Eg: '12, 4:6, 15:, :2') (Leave blank to download all): "
+            )
+        if not ranges:
+            return set(range(1, total_lecs + 1))
     lecture_ids = set()
     ranges = " ".join(ranges)
     ranges = ranges.split(",") if ranges.find(",") else (ranges,)
@@ -126,28 +140,48 @@ def parse_lec_ranges(ranges: list, total_lecs: int) -> set:
     return lecture_ids
 
 
-def main():
-    config = read_json(CONFIG_FILE)
-    data = read_json(DATA_FILE) or {"urls": {}}
-    args = parse_args(config)
-
-    if args.name:
-        name = " ".join(args.name)
+def get_lecture_url(data, name=None, course_url=None):
+    if not (name or course_url):
+        opt = input("Press 'c' to specify Course URL or 'n' for Course Name: ")
+        if opt == "c":
+            course_url = input(
+                "Enter course url (Eg: http://172.16.3.20/ilc/#/course/12345/789): "
+            )
+        elif opt == "n":
+            name = input("Enter course name (fuzzy search enabled): ")
+        else:
+            print("Invalid option selected.")
+            exit(133)
+    if name:
+        name = " ".join(name)
         crs = get_close_matches(name.upper(), data["urls"], 1, 0.3)
         if not crs:
             print(
                 "Could not find course in local database. "
-                "Write name properly or manually specify URL."
+                "Ensure that it has been downloaded at least once using URL. "
             )
             quit(129)
-        course_lectures_url = data["urls"][crs[0]]
+        return data["urls"][crs[0]]
     else:
-        m = re.match(CATALOG_PAT, args.course_url)
+        m = re.match(CATALOG_PAT, course_url)
         if not m:
             print("URL doesn't match required pattern.")
             quit(129)
-        course_lectures_url = impartus_lectures.format(m["subject"], m["lec"])
+        return IMP_LECTURES_URL.format(m["subject"], m["lec"])
+
+
+def main():
+    config = read_json(CONFIG_FILE, verbose=True)
+    data = read_json(DATA_FILE) or {"urls": {}}
+    args = parse_args(config)
+    if not args.username:
+        args.username = input("Enter Impartus Email username: ")
+    if not args.password:
+        args.password = input("Enter Impartus password: ")
     token = login(args.username, args.password)
+
+    course_lectures_url = get_lecture_url(data, args.name, args.course_url)
+
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
     if not response.ok:
@@ -186,7 +220,7 @@ def main():
             title = lecture["topic"]
             date = lecture["startTime"][:10]
             file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mp4")
-            stream_url = impartus_stream.format(ttid, token)
+            stream_url = IMP_STREAM_URL.format(ttid, token)
             pool.apply_async(
                 download_stream, [stream_url, str(working_dir / file_name)]
             )
