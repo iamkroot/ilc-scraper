@@ -5,8 +5,8 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 ## Features
 * Download lectures without subscribing to them.
 * Specify ranges to limit the lectures to be downloaded.
-* Fuzzy search of course names
-* Skip already downloaded lectures
+* Fuzzy searching of course names
+* Skips already downloaded lectures
 * Multiprocessing support
 
 ## Installation
@@ -25,13 +25,15 @@ In case you plan to use the script multiple times, it'll be useful to not have t
 **IMP**: For Windows, you need to use double `\\` in paths. Eg: `C:\\Users\\Student\\Downloads\\Lectures` or `D:\\Impartus`.
 
 ## Running
-* Simple Way: Run `python ilc_scrape.py` and enter the details as asked (See [Help](#help) section).
+* Simple Way: Run `python ilc_scrape.py` and enter the details as asked (See [Help](#help) section). For the first time, you will need to specify the full URL of the course. For future uses, you can use the course name fuzzy matching.
 * Slightly Advanced Way: Pass argument flags to the script. Eg: `python ilc_scrape.py -n operating systems -r 14:16,25 -f` will force download lecture numbers 14, 15 and 25 of OS lectures. See `python ilc_scrape.py -h` to see all available options.
 
 ## How it works
-The script simply exploits the fact that the Impartus API for retrieving the lecture info for a course does not check if the user is subscribed to it. Then its a simple task to loop over the lectures and download their video streams.
+* The script simply exploits the fact that the Impartus API for retrieving the lecture info for a course does not check if the user is subscribed to it. Then its a simple task to loop over the lectures and download their video streams.
 
-All the videos are available as HLS Streams, which are downloaded using `ffmpeg`.
+* All the videos are available as HLS Streams, which are downloaded using `ffmpeg`.
+
+* The fuzzy search for matching the course names works using [`difflib`](https://docs.python.org/3/library/difflib.html) module. For the first time when the course URL is specified, it is added to a local database, along with its full name. These full names are then compared against the given query and the most similar full name is chosen.
 
 ## Help
 ### Specifying Ranges
