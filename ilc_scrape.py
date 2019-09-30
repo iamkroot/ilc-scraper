@@ -94,7 +94,7 @@ def parse_args(config):
         "-N",
         "--no-interaction",
         action="store_true",
-        dest='no_interact',
+        dest="no_interact",
         help="Don't prompt for any missing options (like ranges)",
     )
     return parser.parse_args()
@@ -115,12 +115,13 @@ def sanitize_filepath(filename):
     return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
 
 
-def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool=False) -> set:
+def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -> set:
     if not ranges:
         if not no_interact:
             ranges = input(
                 "Enter ranges (Eg: '12, 4:6, 15:, :2') (Leave blank to download all): "
             )
+            ranges = [ranges] if ranges else None
         if not ranges:
             return set(range(1, total_lecs + 1))
     lecture_ids = set()
@@ -172,7 +173,7 @@ def get_lecture_url(data, name=None, course_url=None):
 
 def main():
     try:
-        subprocess.check_call(["ffmpeg", "-version"])
+        subprocess.check_call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL)
     except FileNotFoundError:
         print("ffmpeg not found. Ensure it is present in PATH.")
         quit(134)
@@ -202,7 +203,7 @@ def main():
     print(f'Saving to "{working_dir!s}"')
     data["urls"].setdefault(subject_name.upper(), course_lectures_url)
     store_json(data, DATA_FILE)
-    lecture_ids = parse_lec_ranges(args.range, total_lecs)
+    lecture_ids = parse_lec_ranges(args.range, total_lecs, args.no_interact)
     if not args.force:
         downloaded: set = {
             int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
@@ -224,7 +225,7 @@ def main():
             ttid = lecture["ttid"]
             title = lecture["topic"]
             date = lecture["startTime"][:10]
-            file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mp4")
+            file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mkv")
             stream_url = IMP_STREAM_URL.format(ttid, token)
             pool.apply_async(
                 download_stream, [stream_url, str(working_dir / file_name)]
