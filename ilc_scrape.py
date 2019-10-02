@@ -27,9 +27,9 @@ CATALOG_PAT = re.compile(
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
 
 
-def print_quit(msg):
+def print_quit(msg, status=1):
     print(msg)
-    exit(1)
+    exit(status)
 
 
 def read_json(file, verbose=False):
@@ -109,6 +109,13 @@ def parse_args(config):
         dest="no_interact",
         help="Don't prompt for any missing options (like ranges)",
     )
+    parser.add_argument(
+        "-k",
+        "--keep-no-class",
+        action="store_true",
+        default=False,
+        help="Download lectures which have 'No class' in title.",
+    )
     return parser.parse_args()
 
 
@@ -132,11 +139,11 @@ def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -
             ranges = input(
                 "Enter ranges (Eg: '12, 4:6, 15:, :2') (Leave blank to download all): "
             )
-            ranges = [ranges] if ranges else None
         if not ranges:
             return set(range(1, total_lecs + 1))
     lecture_ids = set()
-    ranges = " ".join(ranges)
+    if isinstance(ranges, list):
+        ranges = " ".join(ranges)
     ranges = ranges.split(",") if ranges.find(",") else (ranges,)
     for r in ranges:
         m = RANGE_PAT.match(r)
@@ -151,7 +158,7 @@ def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -
     return lecture_ids
 
 
-def get_lecture_url(data, name=None, course_url=None):
+def get_lecture_url(urls, name=None, course_url=None):
     if not (name or course_url):
         opt = input("Press 'c' to specify Course URL or 'n' for Course Name: ")
         if opt == "c":
@@ -163,14 +170,15 @@ def get_lecture_url(data, name=None, course_url=None):
         else:
             print_quit("Invalid option selected.")
     if name:
-        name = " ".join(name)
-        crs = get_close_matches(name.upper(), data["urls"], 1, 0.3)
+        if isinstance(name, list):
+            name = " ".join(name)
+        crs = get_close_matches(name.upper(), urls, 1, 0.3)
         if not crs:
             print_quit(
                 "Could not find course in local database. "
                 "Ensure that it has been downloaded at least once using URL. "
             )
-        return data["urls"][crs[0]]
+        return urls[crs[0]]
     else:
         m = re.match(CATALOG_PAT, course_url)
         if not m:
@@ -195,7 +203,7 @@ def main():
         )
     token = login(args.username, args.password)
 
-    course_lectures_url = get_lecture_url(data, args.name, args.course_url)
+    course_lectures_url = get_lecture_url(data["urls"], args.name, args.course_url)
 
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
@@ -204,8 +212,6 @@ def main():
 
     lectures = response.json()
     total_lecs = len(lectures)
-    if not total_lecs:
-        print_quit("No lectures found!")
 
     subject_name = "{subjectName} {sessionName}".format(**lectures[0])
     working_dir: Path = args.dest / subject_name
@@ -226,18 +232,21 @@ def main():
                 print("Skipping already downloaded lectures:", *sorted(downloaded))
                 lecture_ids -= downloaded
     if not lecture_ids:
-        print("No lectures to download. Exiting.")
-        return
+        print_quit("No lectures to download. Exiting.", 0)
+
     print("Downloading the following lecture numbers:", *sorted(lecture_ids))
 
     with Pool(args.worker_processes) as pool:
-        for lecture in lectures[::-1]:  # Download lecture #1 first
+        for lecture in reversed(lectures):  # Download lecture #1 first
             lec_no = lecture["seqNo"]
             if lec_no not in lecture_ids:
                 continue
 
             ttid = lecture["ttid"]
             title = lecture["topic"]
+            if not args.keep_no_class and "no class" in title:
+                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
+                continue
             date = lecture["startTime"][:10]
             file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mkv")
             stream_url = IMP_STREAM_URL.format(ttid, token)
