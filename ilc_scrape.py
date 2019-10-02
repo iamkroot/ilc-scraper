@@ -8,6 +8,7 @@ import subprocess
 import unicodedata
 import requests
 from difflib import get_close_matches
+from getpass import getpass
 from multiprocessing.pool import Pool
 from pathlib import Path
 
@@ -23,7 +24,12 @@ VALID_CHARS = "-_.() " + string.ascii_letters + string.digits
 CATALOG_PAT = re.compile(
     r"(https?://)?(172\.16\.3\.20/ilc/#/course/)(?P<subject>\d+)/(?P<lec>\d+)/?"
 )
-RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")
+RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
+
+
+def print_quit(msg):
+    print(msg)
+    exit(1)
 
 
 def read_json(file, verbose=False):
@@ -36,8 +42,7 @@ def read_json(file, verbose=False):
     except FileNotFoundError:
         if verbose:
             print(f"Couldn't find {SCRIPT_DIR / file}. Will skip for now.")
-        pass
-    return {}
+    return {}  # use default values / prompt user
 
 
 def store_json(data, file):
@@ -112,8 +117,7 @@ def login(username, password):
 
     response = requests.post(IMP_LOGIN_URL, data=payload)
     if response.status_code != 200:
-        print("Invalid username/password. Try again.")
-        quit(128)
+        print_quit("Invalid username/password. Try again.")
     return response.json()["token"]
 
 
@@ -137,13 +141,12 @@ def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -
     for r in ranges:
         m = RANGE_PAT.match(r)
         if not m:
-            print(f'Invalid range "{r}"')
+            print_quit(f'Invalid range "{r}"')
             quit(130)
         start = int(m["l"] or 0)
         end = start + 1 if m["r"] is None else int(m["r"] or total_lecs + 1)
         if start >= end:
-            print(f'Invalid range "{r}"')
-            quit(130)
+            print_quit(f'Invalid range "{r}"')
         lecture_ids.update(range(start, min(end, total_lecs + 1)))
     return lecture_ids
 
@@ -158,23 +161,20 @@ def get_lecture_url(data, name=None, course_url=None):
         elif opt == "n":
             name = input("Enter course name (fuzzy search enabled): ")
         else:
-            print("Invalid option selected.")
-            exit(133)
+            print_quit("Invalid option selected.")
     if name:
         name = " ".join(name)
         crs = get_close_matches(name.upper(), data["urls"], 1, 0.3)
         if not crs:
-            print(
+            print_quit(
                 "Could not find course in local database. "
                 "Ensure that it has been downloaded at least once using URL. "
             )
-            quit(129)
         return data["urls"][crs[0]]
     else:
         m = re.match(CATALOG_PAT, course_url)
         if not m:
-            print("URL doesn't match required pattern.")
-            quit(129)
+            print_quit("URL doesn't match required pattern.")
         return IMP_LECTURES_URL.format(m["subject"], m["lec"])
 
 
@@ -182,15 +182,17 @@ def main():
     try:
         subprocess.check_call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL)
     except FileNotFoundError:
-        print("ffmpeg not found. Ensure it is present in PATH.")
-        quit(134)
+        print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
+    config = {}
     data = read_json(DATA_FILE) or {"urls": {}}
     args = parse_args(config)
     if not args.username:
         args.username = input("Enter Impartus Email username: ")
     if not args.password:
-        args.password = input("Enter Impartus password: ")
+        args.password = getpass(
+            "Enter Impartus password (keep typing, no '*' will be shown): "
+        )
     token = login(args.username, args.password)
 
     course_lectures_url = get_lecture_url(data, args.name, args.course_url)
@@ -198,18 +200,20 @@ def main():
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
     if not response.ok:
-        print("Error fetching course info. Is the url proper?")
-        quit(129)
+        print_quit("Error fetching course info. Is the url proper?")
 
     lectures = response.json()
     total_lecs = len(lectures)
+    if not total_lecs:
+        print_quit("No lectures found!")
 
-    subject_name = lectures[0]["subjectName"] + " " + lectures[0]["sessionName"]
+    subject_name = "{subjectName} {sessionName}".format(**lectures[0])
     working_dir: Path = args.dest / subject_name
     working_dir.mkdir(exist_ok=True, parents=True)
-    print(f'Saving to "{working_dir!s}"')
+    print(f'Saving to "{working_dir}"')
     data["urls"].setdefault(subject_name.upper(), course_lectures_url)
     store_json(data, DATA_FILE)
+
     lecture_ids = parse_lec_ranges(args.range, total_lecs, args.no_interact)
     if not args.force or args.only_new:
         downloaded: set = {
@@ -243,6 +247,7 @@ def main():
 
         pool.close()
         pool.join()
+    print("Finished!")
 
 
 def download_stream(stream_url, output_file):
