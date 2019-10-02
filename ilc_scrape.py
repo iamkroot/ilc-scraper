@@ -48,15 +48,15 @@ def store_json(data, file):
 def parse_args(config):
     creds = config.get("creds", {})
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+    course_group = parser.add_mutually_exclusive_group()
+    course_group.add_argument(
         "-n",
         "--name",
         nargs="+",
         default=[],
         help="Name of previously downloaded course. Fuzzy match enabled.",
     )
-    group.add_argument("-c", "--course_url", help="Full impartus URL of course")
+    course_group.add_argument("-c", "--course_url", help="Full impartus URL of course")
     parser.add_argument(
         "-d",
         "--dest",
@@ -75,7 +75,8 @@ def parse_args(config):
     parser.add_argument(
         "-w", "--worker_processes", default=os.cpu_count() or 1, type=int
     )
-    parser.add_argument(
+    range_group = parser.add_mutually_exclusive_group()
+    range_group.add_argument(
         "-r",
         "--range",
         nargs="+",
@@ -89,6 +90,12 @@ def parse_args(config):
             "You can also specify multiple ranges using commas. "
             "Eg- '12, 4:6, 15:, :2' will download lectures 1, 4, 5, 12, 15, 16, 17, ..."
         ),
+    )
+    range_group.add_argument(
+        "-o",
+        "--only-new",
+        action="store_true",
+        help="Get all lectures after the last downloaded one.",
     )
     parser.add_argument(
         "-N",
@@ -204,13 +211,16 @@ def main():
     data["urls"].setdefault(subject_name.upper(), course_lectures_url)
     store_json(data, DATA_FILE)
     lecture_ids = parse_lec_ranges(args.range, total_lecs, args.no_interact)
-    if not args.force:
+    if not args.force or args.only_new:
         downloaded: set = {
             int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
         } & lecture_ids
         if downloaded:
-            print("Skipping already downloaded lectures:", *sorted(downloaded))
-        lecture_ids -= downloaded
+            if args.only_new:
+                lecture_ids.difference_update(range(max(downloaded) + 1))
+            else:
+                print("Skipping already downloaded lectures:", *sorted(downloaded))
+                lecture_ids -= downloaded
     if not lecture_ids:
         print("No lectures to download. Exiting.")
         return
