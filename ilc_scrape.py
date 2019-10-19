@@ -103,13 +103,6 @@ def parse_args(config):
         help="Get all lectures after the last downloaded one.",
     )
     parser.add_argument(
-        "-N",
-        "--no-interaction",
-        action="store_true",
-        dest="no_interact",
-        help="Don't prompt for any missing options (like ranges)",
-    )
-    parser.add_argument(
         "-k",
         "--keep-no-class",
         action="store_true",
@@ -192,7 +185,6 @@ def main():
     except FileNotFoundError:
         print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
-    config = {}
     data = read_json(DATA_FILE) or {"urls": {}}
     args = parse_args(config)
     if not args.username:
@@ -220,7 +212,7 @@ def main():
     data["urls"].setdefault(subject_name.upper(), course_lectures_url)
     store_json(data, DATA_FILE)
 
-    lecture_ids = parse_lec_ranges(args.range, total_lecs, args.no_interact)
+    lecture_ids = parse_lec_ranges(args.range, total_lecs, args.name or args.only_new)
     if not args.force or args.only_new:
         downloaded: set = {
             int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
