@@ -236,7 +236,7 @@ def main():
 
             ttid = lecture["ttid"]
             title = lecture["topic"]
-            if not args.keep_no_class and "no class" in title:
+            if not args.keep_no_class and "no class" in title.lower():
                 print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
                 continue
             date = lecture["startTime"][:10]
@@ -256,6 +256,7 @@ def download_stream(stream_url, output_file):
         [
             "ffmpeg",
             "-y",
+            "-xerror",
             "-i",
             stream_url,
             "-c",
