@@ -109,6 +109,13 @@ def parse_args(config):
         default=False,
         help="Download lectures which have 'No class' in title.",
     )
+    parser.add_argument(
+        "-R",
+        "--rename",
+        action="store_true",
+        default=False,
+        help="Update the lecture names with the current values from impartus",
+    )
     return parser.parse_args()
 
 
@@ -179,6 +186,24 @@ def get_lecture_url(urls, name=None, course_url=None):
         return IMP_LECTURES_URL.format(m["subject"], m["lec"])
 
 
+def make_filename(lecture):
+    lec_no = lecture["seqNo"]
+    title = lecture["topic"]
+    date = lecture["startTime"][:10]
+    return sanitize_filepath(f"{lec_no}. {title} {date}.mkv")
+
+
+def rename_old(downloaded, lectures):
+    for lec_no, path in downloaded.items():
+        for lecture in lectures:
+            if lec_no == lecture["seqNo"]:
+                new_name = make_filename(lecture)
+                if path.name != new_name:
+                    print(f"Renaming '{path.name}' to '{new_name}'")
+                    path.rename(path.with_name(new_name))
+                break
+
+
 def main():
     try:
         subprocess.check_call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL)
@@ -214,33 +239,33 @@ def main():
 
     lecture_ids = parse_lec_ranges(args.range, total_lecs, args.name or args.only_new)
     if not args.force or args.only_new:
-        downloaded: set = {
-            int(file.stem[: file.stem.find(".")]) for file in working_dir.glob("*.mkv")
-        } & lecture_ids
+        downloaded: dict = {
+            int(file.stem[: file.stem.find(".")]): file
+            for file in working_dir.glob("*.mkv")
+            if int(file.stem[: file.stem.find(".")]) in lecture_ids
+        }
         if downloaded:
+            if args.rename:
+                rename_old(downloaded, lectures)
             if args.only_new:
                 lecture_ids.difference_update(range(max(downloaded) + 1))
             else:
                 print("Skipping already downloaded lectures:", *sorted(downloaded))
-                lecture_ids -= downloaded
+                lecture_ids.difference_update(downloaded)
     if not lecture_ids:
         print_quit("No lectures to download. Exiting.", 0)
 
     print("Downloading the following lecture numbers:", *sorted(lecture_ids))
-
     with Pool(args.worker_processes) as pool:
         for lecture in reversed(lectures):  # Download lecture #1 first
             lec_no = lecture["seqNo"]
             if lec_no not in lecture_ids:
                 continue
-
-            ttid = lecture["ttid"]
-            title = lecture["topic"]
-            if not args.keep_no_class and "no class" in title.lower():
+            file_name = make_filename(lecture)
+            if not args.keep_no_class and "no class" in file_name.lower():
                 print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
                 continue
-            date = lecture["startTime"][:10]
-            file_name = sanitize_filepath(f"{lec_no}. {title} {date}.mkv")
+            ttid = lecture["ttid"]
             stream_url = IMP_STREAM_URL.format(ttid, token)
             pool.apply_async(
                 download_stream, [stream_url, str(working_dir / file_name)]
@@ -263,7 +288,7 @@ def download_stream(stream_url, output_file):
             "copy",
             output_file,
             "-loglevel",
-            "error",
+            "fatal",
             "-stats",
         ]
     )
