@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import argparse
 import json
 import os
 import re
@@ -12,6 +11,8 @@ from difflib import get_close_matches
 from getpass import getpass
 from multiprocessing.pool import Pool
 from pathlib import Path
+from gooey import Gooey, GooeyParser
+
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = "imp_config.json"
@@ -43,7 +44,7 @@ def read_json(file, verbose=False):
     except FileNotFoundError:
         if verbose:
             print(f"Couldn't find {SCRIPT_DIR / file}. Will skip for now.")
-    return {}  # use default values / prompt user
+    return {}  # use default values
 
 
 def store_json(data, file):
@@ -51,42 +52,38 @@ def store_json(data, file):
         json.dump(data, f, indent=4)
 
 
-def parse_args(config):
+@Gooey(program_name="Impartus Scraper", default_size=(1280, 720), header_height=50)
+def parse_args(config, data):
+    def closest(choice):
+        match = get_close_matches(choice.upper(), data["urls"], 1, 0.2)
+        return match and match[0] or choice
+
     creds = config.get("creds", {})
-    parser = argparse.ArgumentParser()
-    course_group = parser.add_mutually_exclusive_group()
-    course_group.add_argument(
-        "-n",
-        "--name",
-        nargs="+",
-        default=[],
-        help="Name of previously downloaded course. Fuzzy match enabled.",
+    parser = GooeyParser(
+        description="A scraper for Impartus Lecture Capture videos for BITS Hyderabad"
     )
+    creds_group = parser.add_argument_group(title="Credentials")
+    creds_group.add_argument("-u", "--username", default=creds.get("username"))
+    creds_group.add_argument(
+        "-p", "--password", default=creds.get("password"), widget="PasswordField"
+    )
+    if data["urls"]:
+        course_group = parser.add_mutually_exclusive_group()
+        course_group.add_argument(
+            "-n",
+            "--name",
+            choices=data["urls"],
+            type=closest,
+            help="Name of previously downloaded course.",
+        )
+    else:
+        course_group = parser
     course_group.add_argument("-c", "--course_url", help="Full impartus URL of course")
-    parser.add_argument(
-        "-d",
-        "--dest",
-        default=config.get("save_fold", SCRIPT_DIR / "Impartus Lectures"),
-        type=Path,
-        help=f"Download folder (Default: {SCRIPT_DIR / 'Impartus Lectures'})",
-    )
-    parser.add_argument("-u", "--username", default=creds.get("username"))
-    parser.add_argument("-p", "--password", default=creds.get("password"))
-    parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        help="Force overwrite downloaded lectures.",
-    )
-    parser.add_argument(
-        "-w", "--worker_processes", default=os.cpu_count() or 1, type=int
-    )
     range_group = parser.add_mutually_exclusive_group()
     range_group.add_argument(
         "-r",
         "--range",
-        nargs="+",
-        default=[],
+        default="",
         help=(
             "Range of lectures to be downloaded. Hint-"
             " 12 (Only 12 will be downloaded),"
@@ -102,6 +99,27 @@ def parse_args(config):
         "--only-new",
         action="store_true",
         help="Get all lectures after the last downloaded one.",
+    )
+    parser.add_argument(
+        "-d",
+        "--dest",
+        default=config.get("save_fold", SCRIPT_DIR / "Impartus Lectures"),
+        type=Path,
+        help=f"Download folder (Default: {SCRIPT_DIR / 'Impartus Lectures'})",
+        widget="DirChooser",
+    )
+    parser.add_argument(
+        "-w",
+        "--worker_processes",
+        default=1,
+        type=int,
+        choices=range(1, (os.cpu_count() or 1) + 1),
+    )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force overwrite downloaded lectures.",
     )
     parser.add_argument(
         "-k",
@@ -134,7 +152,7 @@ def sanitize_filepath(filename):
     return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
 
 
-def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -> set:
+def parse_lec_ranges(ranges: str, total_lecs: int, no_interact: bool = False) -> set:
     if not ranges:
         if not no_interact:
             ranges = input(
@@ -143,8 +161,6 @@ def parse_lec_ranges(ranges: list, total_lecs: int, no_interact: bool = False) -
         if not ranges:
             return set(range(1, total_lecs + 1))
     lecture_ids = set()
-    if isinstance(ranges, list):
-        ranges = " ".join(ranges)
     ranges = ranges.split(",") if ranges.find(",") else (ranges,)
     for r in ranges:
         m = RANGE_PAT.match(r)
@@ -171,9 +187,7 @@ def get_lecture_url(urls, name=None, course_url=None):
         else:
             print_quit("Invalid option selected.")
     if name:
-        if isinstance(name, list):
-            name = " ".join(name)
-        crs = get_close_matches(name.upper(), urls, 1, 0.3)
+        crs = name in urls and [name] or get_close_matches(name.upper(), urls, 1, 0.3)
         if not crs:
             print_quit(
                 "Could not find course in local database. "
@@ -212,7 +226,8 @@ def main():
         print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
     data = read_json(DATA_FILE) or {"urls": {}}
-    args = parse_args(config)
+    args = parse_args(config, data)
+
     if not args.username:
         args.username = input("Enter Impartus Email username: ")
     if not args.password:
