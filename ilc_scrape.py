@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from argparse import ArgumentTypeError
 import json
 import os
 import re
@@ -8,7 +9,6 @@ import unicodedata
 import urllib
 import requests
 from difflib import get_close_matches
-from getpass import getpass
 from multiprocessing.pool import Pool
 from pathlib import Path
 from gooey import Gooey, GooeyParser
@@ -52,23 +52,53 @@ def store_json(data, file):
         json.dump(data, f, indent=4)
 
 
-@Gooey(program_name="Impartus Scraper", default_size=(1280, 720), header_height=50)
+@Gooey(program_name="Impartus Scraper", default_size=(1280, 840), header_height=50)
 def parse_args(config, data):
     def closest(choice):
         match = get_close_matches(choice.upper(), data["urls"], 1, 0.2)
-        return match and match[0] or choice
+        if not match:
+            raise ArgumentTypeError(
+                "Could not find course in local database. "
+                "Ensure that it has been downloaded at least once using URL."
+            )
+        return match[0]
+
+    def validate_url(url):
+        match = CATALOG_PAT.match(url)
+        if not match:
+            err_msg = "URL doesn't match required pattern."
+            if "a.impartus" in url:
+                err_msg += " Should be intranet link (172.16.3.20)."
+            raise ArgumentTypeError(err_msg)
+        return IMP_LECTURES_URL.format(match["subject"], match["lec"])
 
     creds = config.get("creds", {})
     parser = GooeyParser(
         description="A scraper for Impartus Lecture Capture videos for BITS Hyderabad"
     )
-    creds_group = parser.add_argument_group(title="Credentials")
-    creds_group.add_argument("-u", "--username", default=creds.get("username"))
+    creds_group = parser.add_argument_group(
+        "Credentials",
+        (
+            "Your impartus creds. "
+            "(Only needed for login, "
+            "you will be able download courses you aren't subscribed to.)"
+        ),
+    )
     creds_group.add_argument(
-        "-p", "--password", default=creds.get("password"), widget="PasswordField"
+        "-u", "--username", default=creds.get("username"), required=True
+    )
+    creds_group.add_argument(
+        "-p",
+        "--password",
+        default=creds.get("password"),
+        widget="PasswordField",
+        required=True,
+    )
+    main_args = parser.add_argument_group(
+        "Download options", gooey_options={"columns": 2 if data["urls"] else 1}
     )
     if data["urls"]:
-        course_group = parser.add_mutually_exclusive_group()
+        course_group = main_args.add_mutually_exclusive_group(required=True)
         course_group.add_argument(
             "-n",
             "--name",
@@ -77,21 +107,33 @@ def parse_args(config, data):
             help="Name of previously downloaded course.",
         )
     else:
-        course_group = parser
-    course_group.add_argument("-c", "--course_url", help="Full impartus URL of course")
-    range_group = parser.add_mutually_exclusive_group()
+        course_group = main_args
+    course_group.add_argument(
+        "-c",
+        "--course_url",
+        type=validate_url,
+        help=(
+            "Full impartus URL of course\n"
+            "(Eg: http://172.16.3.20/ilc/#/course/12345/789)"
+        ),
+        required=not data["urls"],
+    )
+    range_group = main_args.add_mutually_exclusive_group()
     range_group.add_argument(
         "-r",
         "--range",
         default="",
-        help=(
-            "Range of lectures to be downloaded. Hint-"
-            " 12 (Only 12 will be downloaded),"
-            " 1:4 (1 included, 4 excluded),"
-            " :10 (Download lecture numbers 1 to 9),"
-            " 3: (Download all lectures from number 3 onwards). "
-            "You can also specify multiple ranges using commas. "
-            "Eg- '12, 4:6, 15:, :2' will download lectures 1, 4, 5, 12, 15, 16, 17, ..."
+        help="\n".join(
+            (
+                "Range of lectures to be downloaded. Hint-",
+                " 12 (Only 12 will be downloaded),",
+                " 1:4 (1 included, 4 excluded),",
+                " :10 (Download lecture numbers 1 to 9),",
+                " 3: (Download all lectures from number 3 onwards).",
+                "You can also specify multiple ranges using commas.",
+                "Eg- 12, 4:6, 15:, :2 will download 1, 4, 5, 12, 15, 16, 17, ..."
+                "Leave blank to download all.",
+            )
         ),
     )
     range_group.add_argument(
@@ -100,39 +142,39 @@ def parse_args(config, data):
         action="store_true",
         help="Get all lectures after the last downloaded one.",
     )
-    parser.add_argument(
+    main_args.add_argument(
         "-d",
         "--dest",
         default=config.get("save_fold", SCRIPT_DIR / "Impartus Lectures"),
         type=Path,
         help=f"Download folder (Default: {SCRIPT_DIR / 'Impartus Lectures'})",
         widget="DirChooser",
+        required=True,
     )
-    parser.add_argument(
+    others = parser.add_argument_group("Other options", gooey_options={"columns": 4})
+    others.add_argument(
         "-w",
         "--worker_processes",
         default=1,
         type=int,
         choices=range(1, (os.cpu_count() or 1) + 1),
     )
-    parser.add_argument(
+    others.add_argument(
         "-f",
         "--force",
         action="store_true",
         help="Force overwrite downloaded lectures.",
     )
-    parser.add_argument(
+    others.add_argument(
         "-k",
         "--keep-no-class",
         action="store_true",
-        default=False,
         help="Download lectures which have 'No class' in title.",
     )
-    parser.add_argument(
+    others.add_argument(
         "-R",
         "--rename",
         action="store_true",
-        default=False,
         help="Update the lecture names with the current values from impartus",
     )
     return parser.parse_args()
@@ -152,53 +194,21 @@ def sanitize_filepath(filename):
     return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
 
 
-def parse_lec_ranges(ranges: str, total_lecs: int, no_interact: bool = False) -> set:
+def parse_lec_ranges(ranges: str, total_lecs: int) -> set:
     if not ranges:
-        if not no_interact:
-            ranges = input(
-                "Enter ranges (Eg: '12, 4:6, 15:, :2') (Leave blank to download all): "
-            )
-        if not ranges:
-            return set(range(1, total_lecs + 1))
+        return set(range(1, total_lecs + 1))
     lecture_ids = set()
     ranges = ranges.split(",") if ranges.find(",") else (ranges,)
     for r in ranges:
         m = RANGE_PAT.match(r)
         if not m:
             print_quit(f'Invalid range "{r}"')
-            quit(130)
         start = int(m["l"] or 0)
         end = start + 1 if m["r"] is None else int(m["r"] or total_lecs + 1)
         if start >= end:
             print_quit(f'Invalid range "{r}"')
         lecture_ids.update(range(start, min(end, total_lecs + 1)))
     return lecture_ids
-
-
-def get_lecture_url(urls, name=None, course_url=None):
-    if not (name or course_url):
-        opt = input("Press 'c' to specify Course URL or 'n' for Course Name: ")
-        if opt == "c":
-            course_url = input(
-                "Enter course url (Eg: http://172.16.3.20/ilc/#/course/12345/789): "
-            )
-        elif opt == "n":
-            name = input("Enter course name (fuzzy search enabled): ")
-        else:
-            print_quit("Invalid option selected.")
-    if name:
-        crs = name in urls and [name] or get_close_matches(name.upper(), urls, 1, 0.3)
-        if not crs:
-            print_quit(
-                "Could not find course in local database. "
-                "Ensure that it has been downloaded at least once using URL. "
-            )
-        return urls[crs[0]]
-    else:
-        m = re.match(CATALOG_PAT, course_url)
-        if not m:
-            print_quit("URL doesn't match required pattern.")
-        return IMP_LECTURES_URL.format(m["subject"], m["lec"])
 
 
 def make_filename(lecture):
@@ -228,15 +238,9 @@ def main():
     data = read_json(DATA_FILE) or {"urls": {}}
     args = parse_args(config, data)
 
-    if not args.username:
-        args.username = input("Enter Impartus Email username: ")
-    if not args.password:
-        args.password = getpass(
-            "Enter Impartus password (keep typing, no '*' will be shown): "
-        )
     token = login(args.username, args.password)
 
-    course_lectures_url = get_lecture_url(data["urls"], args.name, args.course_url)
+    course_lectures_url = args.name and data["urls"][args.name] or args.course_url
 
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
@@ -253,7 +257,7 @@ def main():
     data["urls"].setdefault(subject_name.upper(), course_lectures_url)
     store_json(data, DATA_FILE)
 
-    lecture_ids = parse_lec_ranges(args.range, total_lecs, args.name or args.only_new)
+    lecture_ids = parse_lec_ranges(args.range, total_lecs)
     if not args.force or args.only_new:
         downloaded: dict = {
             int(file.stem[: file.stem.find(".")]): file
@@ -284,7 +288,6 @@ def main():
             ttid = lecture["ttid"]
             stream_url = IMP_STREAM_URL.format(ttid, token)
             pool.apply_async(download_stream, [stream_url, working_dir / file_name])
-
         pool.close()
         pool.join()
     print("Finished!")
