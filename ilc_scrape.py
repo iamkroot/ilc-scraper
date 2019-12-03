@@ -6,6 +6,7 @@ import re
 import string
 import subprocess
 import unicodedata
+import urllib
 import requests
 from difflib import get_close_matches
 from getpass import getpass
@@ -267,31 +268,47 @@ def main():
                 continue
             ttid = lecture["ttid"]
             stream_url = IMP_STREAM_URL.format(ttid, token)
-            pool.apply_async(
-                download_stream, [stream_url, str(working_dir / file_name)]
-            )
+            pool.apply_async(download_stream, [stream_url, working_dir / file_name])
 
         pool.close()
         pool.join()
     print("Finished!")
 
 
+def get_stream_duration(stream_url):
+    """Calculate total length of the stream from the m3u8 playlist file"""
+    master_resp = requests.get(stream_url).text  # master playlist
+    actual_url = urllib.parse.unquote(master_resp.strip().split()[-1])
+    stream_pl = requests.get(actual_url).text  # playlist for single stream
+    top = stream_pl.find("#EXT-X-KEY")
+    end = stream_pl.find("#EXT-X-DISCONTINUITY")
+    stream_1 = stream_pl[top:end]
+    m = re.findall(r"#EXTINF:(?P<dur>\d+\.\d+)", stream_1)
+    return int(sum(map(float, m)))
+
+
 def download_stream(stream_url, output_file):
-    subprocess.call(
-        [
-            "ffmpeg",
-            "-y",
-            "-xerror",
-            "-i",
-            stream_url,
-            "-c",
-            "copy",
-            output_file,
-            "-loglevel",
-            "fatal",
-            "-stats",
-        ]
-    )
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-xerror",
+        "-loglevel",
+        "fatal",
+        "-stats",
+        "-i",
+        stream_url,
+        "-c",
+        "copy",
+    ]
+
+    try:
+        duration = get_stream_duration(stream_url)
+    except Exception as e:
+        print(f"Error while trying to get duration for {output_file.name}.", e)
+    else:
+        cmd += ("-t", str(duration))
+    cmd.append(str(output_file))
+    subprocess.call(cmd)
 
 
 if __name__ == "__main__":
