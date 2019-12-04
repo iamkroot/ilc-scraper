@@ -1,0 +1,21 @@
+name: build
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-python@v1.1.1
+      with:
+        python_version: 3.7
+    - name: Install deps
+      run: |
+        pip install poetry --user
+        python -m poetry install -E gui
+    - name: Run pyinstaller
+      run: python -m poetry run pyinstaller build.spec
