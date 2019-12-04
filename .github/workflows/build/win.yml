@@ -1,0 +1,20 @@
+name: build-win
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-python@1.1.1
+      with:
+        python_version: 3.7
+    - name: Install deps
+      run: |
+        pip install poetry --user
+        poetry install
+    - name: Run pyinstaller
+      run: poetry run pyinstaller build.spec
