@@ -11,6 +11,7 @@ from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
+from sys import exit
 try:
     from gooey import Gooey, GooeyParser
 except ImportError:
@@ -48,6 +49,12 @@ except ImportError:
         def add_argument(self, *args, **kwargs):
             return super().add_argument(*args, **kwargs)
 
+    orig_print = print
+
+    def print(*args, **kwargs):
+        """Override print to send unbufferred output."""
+        kwargs.setdefault("flush", True)
+        orig_print(*args, **kwargs)
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = "imp_config.json"
