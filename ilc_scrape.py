@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from argparse import ArgumentTypeError
 import json
 import os
 import re
@@ -8,6 +7,7 @@ import subprocess
 import unicodedata
 import urllib
 import requests
+from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
@@ -52,7 +52,12 @@ def store_json(data, file):
         json.dump(data, f, indent=4)
 
 
-@Gooey(program_name="Impartus Scraper", default_size=(1280, 840), header_height=50)
+@Gooey(
+    program_name="Impartus Scraper",
+    default_size=(1280, 840),
+    richtext_controls=True,
+    disable_progress_bar_animation=True,
+)
 def parse_args(config, data):
     def closest(choice):
         match = get_close_matches(choice.upper(), data["urls"], 1, 0.2)
@@ -83,16 +88,17 @@ def parse_args(config, data):
             "(Only needed for login, "
             "you will be able download courses you aren't subscribed to.)"
         ),
+        gooey_options={"columns": 3},
+    )
+    creds_group.add_argument("-u", "--username", default=creds.get("username"))
+    creds_group.add_argument(
+        "-p", "--password", default=creds.get("password"), widget="PasswordField"
     )
     creds_group.add_argument(
-        "-u", "--username", default=creds.get("username"), required=True
-    )
-    creds_group.add_argument(
-        "-p",
-        "--password",
-        default=creds.get("password"),
-        widget="PasswordField",
-        required=True,
+        "-s",
+        "--save-creds",
+        action="store_true",
+        help="Save credentials so that they can be automatically loaded in the future",
     )
     main_args = parser.add_argument_group(
         "Download options", gooey_options={"columns": 2 if data["urls"] else 1}
@@ -147,9 +153,8 @@ def parse_args(config, data):
         "--dest",
         default=config.get("save_fold", SCRIPT_DIR / "Impartus Lectures"),
         type=Path,
-        help=f"Download folder (Default: {SCRIPT_DIR / 'Impartus Lectures'})",
+        help=f"Download folder",
         widget="DirChooser",
-        required=True,
     )
     others = parser.add_argument_group("Other options", gooey_options={"columns": 4})
     others.add_argument(
@@ -158,6 +163,7 @@ def parse_args(config, data):
         default=1,
         type=int,
         choices=range(1, (os.cpu_count() or 1) + 1),
+        help="Number of CPU cores to utilize.",
     )
     others.add_argument(
         "-f",
@@ -175,15 +181,17 @@ def parse_args(config, data):
         "-R",
         "--rename",
         action="store_true",
-        help="Update the lecture names with the current values from impartus",
+        help="Update downloaded lecture names with the current values from impartus",
     )
     return parser.parse_args()
 
 
 def login(username, password):
     payload = {"username": username, "password": password}
-
-    response = requests.post(IMP_LOGIN_URL, data=payload)
+    try:
+        response = requests.post(IMP_LOGIN_URL, data=payload, timeout=3)
+    except requests.ConnectionError:
+        print_quit("Connection Error")
     if response.status_code != 200:
         print_quit("Invalid username/password. Try again.")
     return response.json()["token"]
@@ -237,7 +245,11 @@ def main():
     config = read_json(CONFIG_FILE, verbose=True)
     data = read_json(DATA_FILE) or {"urls": {}}
     args = parse_args(config, data)
-
+    if not args.username or not args.password:
+        print_quit("Email and password not provided.")
+    if args.save_creds:
+        config["creds"] = {"username": args.username, "password": args.password}
+        store_json(config, CONFIG_FILE)
     token = login(args.username, args.password)
 
     course_lectures_url = args.name and data["urls"][args.name] or args.course_url
@@ -312,7 +324,6 @@ def download_stream(stream_url, output_file):
         "-xerror",
         "-loglevel",
         "fatal",
-        "-stats",
         "-i",
         stream_url,
         "-c",
@@ -327,6 +338,7 @@ def download_stream(stream_url, output_file):
         cmd += ("-t", str(duration))
     cmd.append(str(output_file))
     subprocess.call(cmd)
+    print("Downloaded", output_file.name)
 
 
 if __name__ == "__main__":
