@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ilc-scraper"
-version = "0.1.0"
+version = "0.2.0"
 description = "A scraper for Impartus Lecture Capture videos for BITS Hyderabad"
 authors = ["iamkroot <kroot.patel@gmail.com>"]
 readme = "README.md"
@@ -9,7 +9,10 @@ repository = "https://github.com/iamkroot/ilc-scraper"
 [tool.poetry.dependencies]
 python = "^3.6"
 requests = "^2.22"
-gooey = "^1.0"
+gooey = { version = "^1.0", optional = true }
+
+[tool.poetry.extras]
+gui = ["gooey"]
 
 [tool.poetry.dev-dependencies]
 pyinstaller = "^3.5"

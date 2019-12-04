@@ -11,7 +11,42 @@ from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
-from gooey import Gooey, GooeyParser
+try:
+    from gooey import Gooey, GooeyParser
+except ImportError:
+    # Gooey not installed
+    from argparse import ArgumentParser
+    from functools import wraps
+
+    def remove_gooey_kwargs(func):
+        """Decorator to remove gooey keyword arguments from functions."""
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for kwd in ("gooey_options", "widget"):
+                try:
+                    del kwargs[kwd]
+                except KeyError:
+                    pass  # EAFP
+            return func(*args, **kwargs)
+        return wrapper
+
+    def Gooey(*args, **kwargs):
+        def wrapper(func):
+            return func  # make no changes to the function
+        return wrapper
+
+    class GooeyParser(ArgumentParser):
+        """Modified parser that ignores gooey arguments in function calls."""
+        @remove_gooey_kwargs
+        def add_argument_group(self, *args, **kwargs):
+            group = super().add_argument_group(*args, **kwargs)
+            group.add_argument_group = remove_gooey_kwargs(group.add_argument_group)
+            group.add_argument = remove_gooey_kwargs(group.add_argument)
+            return group
+
+        @remove_gooey_kwargs
+        def add_argument(self, *args, **kwargs):
+            return super().add_argument(*args, **kwargs)
 
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
