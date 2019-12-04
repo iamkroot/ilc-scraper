@@ -1,1 +1,5 @@
 *.json
+temp.py
+__pycache__
+build
+dist
