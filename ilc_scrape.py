@@ -193,10 +193,10 @@ def parse_lec_ranges(ranges: str, total_lecs: int) -> set:
 
 
 def make_filename(lecture):
-    lec_no = lecture["seqNo"]
+    lec_no = int(lecture["seqNo"])
     title = lecture["topic"]
     date = lecture["startTime"][:10]
-    return sanitize_filepath(f"{lec_no}. {title} {date}.mkv")
+    return sanitize_filepath(f"{lec_no:02}. {title} {date}.mkv")
 
 
 def rename_old(downloaded, lectures):
@@ -245,8 +245,8 @@ def main():
     lecture_ids = parse_lec_ranges(args.range, total_lecs)
     if not args.force or args.only_new:
         downloaded: dict = {
-            int(file.stem[: file.stem.find(".")]): file
-            for file in working_dir.glob("*.mkv")
+            int(file.stem[:2]): file
+            for file in working_dir.glob("[0-9][0-9].*.mkv")
             if int(file.stem[: file.stem.find(".")]) in lecture_ids
         }
         if downloaded:
