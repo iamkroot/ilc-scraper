@@ -4,6 +4,7 @@ import os
 import re
 import string
 import subprocess
+import sys
 import unicodedata
 import urllib
 import requests
@@ -12,6 +13,7 @@ from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
 from sys import exit
+
 try:
     from gooey import Gooey, GooeyParser
 except ImportError:
@@ -21,6 +23,7 @@ except ImportError:
 
     def remove_gooey_kwargs(func):
         """Decorator to remove gooey keyword arguments from functions."""
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             for kwd in ("gooey_options", "widget"):
@@ -29,15 +32,18 @@ except ImportError:
                 except KeyError:
                     pass  # EAFP
             return func(*args, **kwargs)
+
         return wrapper
 
     def Gooey(*args, **kwargs):
         def wrapper(func):
             return func  # make no changes to the function
+
         return wrapper
 
     class GooeyParser(ArgumentParser):
         """Modified parser that ignores gooey arguments in function calls."""
+
         @remove_gooey_kwargs
         def add_argument_group(self, *args, **kwargs):
             group = super().add_argument_group(*args, **kwargs)
@@ -55,6 +61,7 @@ except ImportError:
         """Override print to send unbufferred output."""
         kwargs.setdefault("flush", True)
         orig_print(*args, **kwargs)
+
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = "imp_config.json"
@@ -96,7 +103,7 @@ def store_json(data, file):
 
 @Gooey(
     program_name="Impartus Scraper",
-    default_size=(1280, 840),
+    default_size=(1280, 720),
     richtext_controls=True,
     disable_progress_bar_animation=True,
 )
@@ -279,9 +286,32 @@ def rename_old(downloaded, lectures):
                 break
 
 
+def subprocess_args(include_stdout=True):
+    env = None
+    si = getattr(subprocess, "STARTUPINFO")
+    if si:
+        si = si()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        env = os.environ
+    sep = ";" if os.name == "nt" else ":"
+    env["PATH"] = env["PATH"] + sep + sep.join(sys.path)
+    args = {
+        "close_fds": True,
+        "stdin": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "startupinfo": si,
+        "env": env,
+    }
+    if include_stdout:
+        args["stdout"] = subprocess.PIPE
+    return args
+
+
 def main():
     try:
-        subprocess.check_call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL)
+        subprocess.check_call(
+            ["ffmpeg", "-version"], stdout=subprocess.DEVNULL, **subprocess_args(False)
+        )
     except FileNotFoundError:
         print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
@@ -379,7 +409,7 @@ def download_stream(stream_url, output_file):
     else:
         cmd += ("-t", str(duration))
     cmd.append(str(output_file))
-    subprocess.call(cmd)
+    subprocess.call(cmd, **subprocess_args())
     print("Downloaded", output_file.name)
 
 

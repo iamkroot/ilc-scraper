@@ -1,13 +1,27 @@
 import gooey
+import subprocess
+options = [("u", None, "OPTION"), ("u", None, "OPTION"), ("u", None, "OPTION")]
+from pathlib import Path
+
+def find_ffmpeg():
+    ffmpeg = tuple(Path().glob("ffmpeg*"))
+    if ffmpeg:
+        return ffmpeg[0]
+    try:
+        return Path(subprocess.check_output(["where", "ffmpeg"]).decode().strip())
+    except Exception as e:
+        print("Could not find ffmpeg.")
+        raise e
 
 gooey_root = os.path.dirname(gooey.__file__)
 gooey_languages = Tree(os.path.join(gooey_root, "languages"), prefix="gooey/languages")
 gooey_images = Tree(os.path.join(gooey_root, "images"), prefix="gooey/images")
+
 a = Analysis(
     ["ilc_scrape.py"],
     pathex=[""],
     binaries=[],
-    datas=[],
+    datas=[(str(find_ffmpeg()), ".")],
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
@@ -19,8 +33,6 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
-
-options = [("u", None, "OPTION"), ("u", None, "OPTION"), ("u", None, "OPTION")]
 
 exe = EXE(
     pyz,
