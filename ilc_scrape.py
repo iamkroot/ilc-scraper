@@ -1,104 +1,33 @@
 #!/usr/bin/env python
-import json
 import os
 import re
-import string
-import subprocess
-import sys
-import unicodedata
+import subprocess as sp
 import urllib
 import requests
 from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
-from sys import exit
+from utils import sp_args, print_quit, read_json, store_json, sanitize_filepath
 
 try:
     from gooey import Gooey, GooeyParser
 except ImportError:
     # Gooey not installed
-    from argparse import ArgumentParser
-    from functools import wraps
-
-    def remove_gooey_kwargs(func):
-        """Decorator to remove gooey keyword arguments from functions."""
-
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            for kwd in ("gooey_options", "widget"):
-                try:
-                    del kwargs[kwd]
-                except KeyError:
-                    pass  # EAFP
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    def Gooey(*args, **kwargs):
-        def wrapper(func):
-            return func  # make no changes to the function
-
-        return wrapper
-
-    class GooeyParser(ArgumentParser):
-        """Modified parser that ignores gooey arguments in function calls."""
-
-        @remove_gooey_kwargs
-        def add_argument_group(self, *args, **kwargs):
-            group = super().add_argument_group(*args, **kwargs)
-            group.add_argument_group = remove_gooey_kwargs(group.add_argument_group)
-            group.add_argument = remove_gooey_kwargs(group.add_argument)
-            return group
-
-        @remove_gooey_kwargs
-        def add_argument(self, *args, **kwargs):
-            return super().add_argument(*args, **kwargs)
-
-    orig_print = print
-
-    def print(*args, **kwargs):
-        """Override print to send unbufferred output."""
-        kwargs.setdefault("flush", True)
-        orig_print(*args, **kwargs)
-
+    from utils import Gooey, GooeyParser  # dummy objects
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
-CONFIG_FILE = "imp_config.json"
-DATA_FILE = "imp_data.json"
+CONFIG_FILE = SCRIPT_DIR / "imp_config.json"
+DATA_FILE = SCRIPT_DIR / "imp_data.json"
 IMP_BASE_URL = "http://172.16.3.20/"
 IMP_LOGIN_URL = IMP_BASE_URL + "api/auth/signin"
 IMP_STREAM_URL = IMP_BASE_URL + "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
 IMP_LECTURES_URL = IMP_BASE_URL + "api/subjects/{}/lectures/{}"
 
-VALID_CHARS = "-_.() " + string.ascii_letters + string.digits
 CATALOG_PAT = re.compile(
     r"(https?://)?(172\.16\.3\.20/ilc/#/course/)(?P<subject>\d+)/(?P<lec>\d+)/?"
 )
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
-
-
-def print_quit(msg, status=1):
-    print(msg)
-    exit(status)
-
-
-def read_json(file, verbose=False):
-    try:
-        with open(SCRIPT_DIR / file) as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        print("Error while reading", file)
-        print(e.msg)
-    except FileNotFoundError:
-        if verbose:
-            print(f"Couldn't find {SCRIPT_DIR / file}. Will skip for now.")
-    return {}  # use default values
-
-
-def store_json(data, file):
-    with open(SCRIPT_DIR / file, "w") as f:
-        json.dump(data, f, indent=4)
 
 
 @Gooey(
@@ -246,11 +175,6 @@ def login(username, password):
     return response.json()["token"]
 
 
-def sanitize_filepath(filename):
-    cleaned = unicodedata.normalize("NFKD", filename).encode("ASCII", "ignore")
-    return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
-
-
 def parse_lec_ranges(ranges: str, total_lecs: int) -> set:
     if not ranges:
         return set(range(1, total_lecs + 1))
@@ -286,32 +210,9 @@ def rename_old(downloaded, lectures):
                 break
 
 
-def subprocess_args(include_stdout=True):
-    env = None
-    si = getattr(subprocess, "STARTUPINFO")
-    if si:
-        si = si()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        env = os.environ
-    sep = ";" if os.name == "nt" else ":"
-    env["PATH"] = env["PATH"] + sep + sep.join(sys.path)
-    args = {
-        "close_fds": True,
-        "stdin": subprocess.PIPE,
-        "stderr": subprocess.PIPE,
-        "startupinfo": si,
-        "env": env,
-    }
-    if include_stdout:
-        args["stdout"] = subprocess.PIPE
-    return args
-
-
 def main():
     try:
-        subprocess.check_call(
-            ["ffmpeg", "-version"], stdout=subprocess.DEVNULL, **subprocess_args(False)
-        )
+        sp.check_call(["ffmpeg", "-version"], **dict(sp_args, stdout=sp.DEVNULL))
     except FileNotFoundError:
         print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
@@ -409,7 +310,7 @@ def download_stream(stream_url, output_file):
     else:
         cmd += ("-t", str(duration))
     cmd.append(str(output_file))
-    subprocess.call(cmd, **subprocess_args())
+    sp.call(cmd, **sp_args)
     print("Downloaded", output_file.name)
 
 
