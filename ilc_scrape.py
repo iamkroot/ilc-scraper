@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import multiprocessing
 import os
 import re
 import subprocess as sp
@@ -12,9 +13,10 @@ from utils import sp_args, print_quit, read_json, store_json, sanitize_filepath
 
 try:
     from gooey import Gooey, GooeyParser
-except ImportError:
-    # Gooey not installed
+except ImportError:  # Gooey not installed
     from utils import Gooey, GooeyParser  # dummy objects
+else:
+    from utils import print  # override print with flush=True for Gooey support
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = SCRIPT_DIR / "imp_config.json"
@@ -290,7 +292,7 @@ def get_stream_duration(stream_url):
     return int(sum(map(float, m)))
 
 
-def download_stream(stream_url, output_file):
+def download_stream(stream_url: str, output_file: Path):
     cmd = [
         "ffmpeg",
         "-y",
@@ -310,9 +312,11 @@ def download_stream(stream_url, output_file):
     else:
         cmd += ("-t", str(duration))
     cmd.append(str(output_file))
+    print("Downloading", output_file.name)
     sp.call(cmd, **sp_args)
     print("Downloaded", output_file.name)
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
