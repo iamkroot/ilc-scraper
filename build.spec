@@ -43,7 +43,7 @@ exe = EXE(
     options,
     gooey_languages,  # Add them in to collected files
     gooey_images,  # Same here.
-    name="Impartus Scraper",
+    name="ImpartusScraper",
     debug=False,
     strip=False,
     upx=True,
