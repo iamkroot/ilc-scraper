@@ -4,7 +4,7 @@ options = [("u", None, "OPTION"), ("u", None, "OPTION"), ("u", None, "OPTION")]
 from pathlib import Path
 
 def find_ffmpeg():
-    ffmpeg = tuple(Path().glob("ffmpeg*"))
+    ffmpeg = tuple(Path().glob("ffmpeg.exe"))
     if ffmpeg:
         return ffmpeg[0]
     try:
