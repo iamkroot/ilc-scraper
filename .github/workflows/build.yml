@@ -1,45 +1,51 @@
-name: build
+name: Build and Release
 
-on: [push]
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
-  build_win:
-    runs-on: windows-latest
+  build_and_release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-16.04]
+        include:
+          - os: windows-latest
+            artifact_name: ImpartusScraper.exe
+            asset_name: impartus-scraper-windows.exe
+          - os: ubuntu-16.04
+            artifact_name: ImpartusScraper
+            asset_name: impartus-scraper-linux
     steps:
     - uses: actions/checkout@v1
     - uses: actions/setup-python@v1.1.1
       with:
         python-version: '3.7'  
-    - name: Install deps
+    - name: Install deps win
+      if: runner.os == 'Windows'
       run: |
-        Invoke-WebRequest https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip -OutFile ffmpeg.zip
         Invoke-WebRequest https://www.7-zip.org/a/7z1900-x64.exe -OutFile 7z.exe
+        Invoke-WebRequest https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip -OutFile ffmpeg.zip
+        Invoke-WebRequest https://github.com/upx/upx/releases/download/v3.95/upx-3.95-win64.zip -OutFile upx.zip
         7z.exe e ffmpeg.zip ffmpeg.exe -r
-        pip install poetry --user
-        python -m poetry install -E gui
-    - name: Run pyinstaller
-      run: python -m poetry run pyinstaller build.spec
-    - uses: actions/upload-artifact@v1
-      with:
-        name: setup_win
-        path: dist/ImpartusScraper.exe
-
-  build_ubuntu:
-    runs-on: ubuntu-16.04
-    steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-python@v1.1.1
-      with:
-        python-version: '3.7'
-    - name: Install deps
+        7z.exe e upx.zip upx.exe -r
+        echo "::add-path::%cd%"
+    - name: Install deps ubuntu
+      if: runner.os == 'Linux'
       run: |
-        sudo apt-get -q install -y ffmpeg libgtk-3-dev
-        echo "::set-env name=build_file::ImpartusScraper"
+        sudo apt-get -qq install -y ffmpeg libgtk-3-dev upx
+    - name: Install deps python
+      run: |
         pip install poetry --user
         python -m poetry install -E gui
-    - name: Run pyinstaller
+    - name: Build file using pyinstaller
       run: python -m poetry run pyinstaller build.spec
-    - uses: actions/upload-artifact@v1
+    - name: Upload to release
+      uses: svenstaro/upload-release-action@v1-release
       with:
-        name: setup_linux
-        path: dist/ImpartusScraper
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist/${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        tag: ${{ github.ref }}
