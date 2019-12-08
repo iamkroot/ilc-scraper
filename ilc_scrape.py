@@ -236,7 +236,6 @@ def main():
 
     lectures = response.json()
     total_lecs = len(lectures)
-
     subject_name = "{subjectName} {sessionName}".format(**lectures[0])
     working_dir: Path = args.dest / subject_name
     working_dir.mkdir(exist_ok=True, parents=True)
@@ -274,7 +273,10 @@ def main():
                 continue
             ttid = lecture["ttid"]
             stream_url = IMP_STREAM_URL.format(ttid, token)
-            pool.apply_async(download_stream, [stream_url, working_dir / file_name])
+            lec_duration = lecture.get("actualDuration")
+            pool.apply_async(
+                download_stream, (stream_url, working_dir / file_name, lec_duration)
+            )
         pool.close()
         pool.join()
     print("Finished!")
@@ -292,7 +294,7 @@ def get_stream_duration(stream_url):
     return int(sum(map(float, m)))
 
 
-def download_stream(stream_url: str, output_file: Path):
+def download_stream(stream_url: str, output_file: Path, duration=None):
     cmd = [
         "ffmpeg",
         "-y",
@@ -306,7 +308,7 @@ def download_stream(stream_url: str, output_file: Path):
     ]
 
     try:
-        duration = get_stream_duration(stream_url)
+        duration = duration or get_stream_duration(stream_url)
     except Exception as e:
         print(f"Error while trying to get duration for {output_file.name}.", e)
     else:
