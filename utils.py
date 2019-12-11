@@ -25,6 +25,11 @@ def remove_gooey_kwargs(func):
 
 
 def Gooey(*args, **kwargs):
+    try:
+        sys.argv.remove("--ignore-gooey")  # remove flag from CLI as gooey not installed
+    except ValueError:
+        pass
+
     def wrapper(func):
         return func  # make no changes to the function
 
