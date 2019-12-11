@@ -4,6 +4,7 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 
 ## Features
 * Awesome GUI!
+	![GUI](assets/screenshot.png)
 * Download lectures without subscribing to them.
 * Specify ranges to limit the lectures to be downloaded.
 * Fuzzy searching of course names.
@@ -11,6 +12,9 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 * Multiprocessing support.
 
 ## Installation
+**Recommended:** Go to the [Releases](https://github.com/iamkroot/ilc-scraper/releases) page and download the latest version according to your OS. Just double click and run!
+
+**Manual method:**
 1. Ensure you have [Python 3.6](https://www.python.org/downloads/) or higher installed, and available in your system `PATH`. To check, run `python --version` from command line/terminal.
 2. Install `ffmpeg` from [here](http://ffmpeg.org/download.html). Ensure it is in your PATH variable. To check, run `ffmpeg -version` from command line/terminal.
 3. Install [poetry](https://github.com/sdispater/poetry) using `pip install --user poetry`. Restart your PC.
@@ -26,7 +30,7 @@ In case you plan to use the script multiple times, it'll be useful to not have t
 
 **IMP**: For Windows, you need to use double `\\` in paths. Eg: `C:\\Users\\Student\\Downloads\\Lectures` or `D:\\Impartus`.
 
-## Running
+## Running (manual method)
 * GUI: Run `poetry run python ilc_scrape.py` and enter the details as asked (See [Help](#help) section). For the first time, you will need to specify the full URL of the course. For future uses, you can select the course names from the dropdown.
 * Command line: Pass argument flags to the script. Eg: `poetry run python ilc_scrape.py -n "operating systems" -r 14:16,25 -f` will force download lecture numbers 14, 15 and 25 of OS lectures. See `python ilc_scrape.py -h` to see all available options. If you have the GUI installed, but still wanna use the command line, add `--ignore-gooey` to the command at the end. This will disable the GUI.
 
@@ -36,6 +40,8 @@ In case you plan to use the script multiple times, it'll be useful to not have t
 * All the videos are available as HLS Streams, which are downloaded using `ffmpeg`.
 
 * The fuzzy search for matching the course names works using [`difflib`](https://docs.python.org/3/library/difflib.html) module. For the first time when the course URL is specified, it is added to a local database, along with its full name. These full names are then compared against the given query and the most similar full name is chosen.
+
+* The GUI is made using [Gooey](https://github.com/chriskiehl/Gooey), which makes it dead simple to convert CLI Python apps to full featured GUIs.
 
 ## Help
 ### Specifying Ranges
