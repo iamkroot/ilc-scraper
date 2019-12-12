@@ -9,46 +9,43 @@ from functools import wraps
 from sys import exit
 
 
-def remove_gooey_kwargs(func):
+def remove_gooey_kwargs(func_or_cls):
     """Decorator to remove gooey keyword arguments from functions."""
+    functions = ("add_argument_group", "add_mutually_exclusive_group", "add_argument")
 
-    @wraps(func)
+    @wraps(func_or_cls)
     def wrapper(*args, **kwargs):
         for kwd in ("gooey_options", "widget"):
             try:
                 del kwargs[kwd]
             except KeyError:
                 pass  # EAFP
-        return func(*args, **kwargs)
+
+        obj = func_or_cls(*args, **kwargs)
+        for name in functions:
+            orig_func = getattr(obj, name, None)
+            if orig_func:
+                setattr(obj, name, remove_gooey_kwargs(orig_func))
+
+        return obj
 
     return wrapper
 
 
 def Gooey(*args, **kwargs):
+    """Decorator called when Gooey not installed. Simply returns original function."""
+
     try:
         sys.argv.remove("--ignore-gooey")  # remove flag from CLI as gooey not installed
     except ValueError:
         pass
 
-    def wrapper(func):
-        return func  # make no changes to the function
-
-    return wrapper
+    return lambda func: func
 
 
+@remove_gooey_kwargs
 class GooeyParser(ArgumentParser):
     """Modified parser that ignores gooey arguments in function calls."""
-
-    @remove_gooey_kwargs
-    def add_argument_group(self, *args, **kwargs):
-        group = super().add_argument_group(*args, **kwargs)
-        group.add_argument_group = remove_gooey_kwargs(group.add_argument_group)
-        group.add_argument = remove_gooey_kwargs(group.add_argument)
-        return group
-
-    @remove_gooey_kwargs
-    def add_argument(self, *args, **kwargs):
-        return super().add_argument(*args, **kwargs)
 
 
 orig_print = print
