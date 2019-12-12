@@ -38,9 +38,9 @@ RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
     richtext_controls=True,
     disable_progress_bar_animation=True,
 )
-def parse_args(config, data):
-    def closest(choice):
-        match = get_close_matches(choice.upper(), data["urls"], 1, 0.2)
+def parse_args(config, course_api_urls=None):
+    def closest_name(choice):
+        match = get_close_matches(choice.upper(), course_api_urls, 1, 0.2)
         if not match:
             raise ArgumentTypeError(
                 "Could not find course in local database. "
@@ -64,8 +64,7 @@ def parse_args(config, data):
     creds_group = parser.add_argument_group(
         "Credentials",
         (
-            "Your impartus creds. "
-            "(Only needed for login, "
+            "Your impartus creds. (Only needed for login, "
             "you will be able download courses you aren't subscribed to.)"
         ),
         gooey_options={"columns": 3},
@@ -81,15 +80,15 @@ def parse_args(config, data):
         help="Save credentials so that they can be automatically loaded in the future",
     )
     main_args = parser.add_argument_group(
-        "Download options", gooey_options={"columns": 2 if data["urls"] else 1}
+        "Download options", gooey_options={"columns": 2 if course_api_urls else 1}
     )
-    if data["urls"]:
+    if course_api_urls:
         course_group = main_args.add_mutually_exclusive_group(required=True)
         course_group.add_argument(
             "-n",
             "--name",
-            choices=data["urls"],
-            type=closest,
+            choices=course_api_urls,
+            type=closest_name,
             help="Name of previously downloaded course.",
         )
     else:
@@ -102,7 +101,7 @@ def parse_args(config, data):
             "Full impartus URL of course\n"
             "(Eg: http://172.16.3.20/ilc/#/course/12345/789)"
         ),
-        required=not data["urls"],
+        required=not course_api_urls,
     )
     range_group = main_args.add_mutually_exclusive_group()
     range_group.add_argument(
@@ -219,7 +218,7 @@ def main():
         print_quit("ffmpeg not found. Ensure it is present in PATH.")
     config = read_json(CONFIG_FILE, verbose=True)
     data = read_json(DATA_FILE) or {"urls": {}}
-    args = parse_args(config, data)
+    args = parse_args(config, data["urls"])
     if not args.username or not args.password:
         print_quit("Email and password not provided.")
     if args.save_creds:
