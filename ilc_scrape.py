@@ -22,12 +22,13 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 CONFIG_FILE = SCRIPT_DIR / "imp_config.json"
 DATA_FILE = SCRIPT_DIR / "imp_data.json"
 IMP_BASE_URL = "http://172.16.3.20/"
-IMP_LOGIN_URL = IMP_BASE_URL + "api/auth/signin"
-IMP_STREAM_URL = IMP_BASE_URL + "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
-IMP_LECTURES_URL = IMP_BASE_URL + "api/subjects/{}/lectures/{}"
+IMP_LOGIN_URL = "api/auth/signin"
+IMP_STREAM_URL = "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
+IMP_LECTURES_URL = "api/subjects/{}/lectures/{}"
 
 CATALOG_PAT = re.compile(
-    r"(https?://)?(172\.16\.3\.20/ilc/#/course/)(?P<subject>\d+)/(?P<lec>\d+)/?"
+    r"(?P<base>(https?://)?((172\.16\.3\.20)|(a.impartus.com))/)"
+    r"ilc/#/course/(?P<subject>\d+)/(?P<lec>\d+)/?"
 )
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
 
@@ -49,13 +50,12 @@ def parse_args(config, course_api_urls=None):
         return match[0]
 
     def validate_url(url):
+        global IMP_BASE_URL
         match = CATALOG_PAT.match(url)
         if not match:
-            err_msg = "URL doesn't match required pattern."
-            if "a.impartus" in url:
-                err_msg += " Should be intranet link (172.16.3.20)."
-            raise ArgumentTypeError(err_msg)
-        return IMP_LECTURES_URL.format(match["subject"], match["lec"])
+            raise ArgumentTypeError("URL doesn't match required pattern.")
+        IMP_BASE_URL = match["base"]
+        return IMP_BASE_URL + IMP_LECTURES_URL.format(match["subject"], match["lec"])
 
     creds = config.get("creds", {})
     parser = GooeyParser(
@@ -168,7 +168,7 @@ def parse_args(config, course_api_urls=None):
 def login(username, password):
     payload = {"username": username, "password": password}
     try:
-        response = requests.post(IMP_LOGIN_URL, data=payload, timeout=3)
+        response = requests.post(IMP_BASE_URL + IMP_LOGIN_URL, data=payload, timeout=3)
     except requests.ConnectionError:
         print_quit("Connection Error")
     if response.status_code != 200:
@@ -225,8 +225,7 @@ def main():
         config["creds"] = {"username": args.username, "password": args.password}
         store_json(config, CONFIG_FILE)
     token = login(args.username, args.password)
-
-    course_lectures_url = "name" in args and data["urls"][args.name] or args.course_url
+    course_lectures_url = data["urls"].get(getattr(args, "name", None), args.course_url)
 
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
@@ -271,7 +270,7 @@ def main():
                 print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
                 continue
             ttid = lecture["ttid"]
-            stream_url = IMP_STREAM_URL.format(ttid, token)
+            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
             lec_duration = lecture.get("actualDuration")
             pool.apply_async(
                 download_stream, (stream_url, working_dir / file_name, lec_duration)
