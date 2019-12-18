@@ -1,29 +1,40 @@
 name: Build and Release
 
-on:
-  push:
-    tags:
-      - 'v*'
+on: [push]
 
 jobs:
   build_and_release:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-16.04]
+        # os: [windows-latest, ubuntu-16.04]
+        os: [windows-latest]
         include:
           - os: windows-latest
             artifact_name: ImpartusScraper.exe
             asset_name: impartus-scraper-windows.exe
-        include:
-          - os: ubuntu-16.04
-            artifact_name: ImpartusScraper
-            asset_name: impartus-scraper-linux
+            venv_dir: "%USERPROFILE%\\.virtualenvs"
+          # - os: ubuntu-16.04
+          #   artifact_name: ImpartusScraper
+          #   asset_name: impartus-scraper-linux
+          #   venv_dir: ~/.virtualenvs
     steps:
     - uses: actions/checkout@v1
-    - uses: actions/setup-python@v1.1.1
       with:
-        python-version: '3.7'  
+        fetch-depth: 1
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1.1.1
+      with:
+        python-version: '3.7'
+    - name: Install Poetry
+      uses: dschep/install-poetry-action@v1.2
+    - name: Cache Poetry virtualenv
+      id: cache
+      uses: actions/cache@v1
+      with:
+        path: ~/.virtualenvs
+        key: poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: poetry-${{ hashFiles('**/poetry.lock') }}
     - name: Install deps win
       if: runner.os == 'Windows'
       run: |
@@ -34,22 +45,28 @@ jobs:
         7z.exe e ffmpeg.zip ffmpeg.exe -r
         echo "::add-path::%cd%"
     - name: Install deps ubuntu
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg pkg-config upx libgtk-3-dev
-          echo "::set-env name=ILC_SCRAPER_UPX::1"
-          echo "::add-path::$HOME/.local/bin"
-    - name: Install deps python
+      if: runner.os == 'Linux'
       run: |
-        pip install poetry --user
-        python -m poetry install -E gui
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg pkg-config upx libgtk-3-dev
+        echo "::set-env name=ILC_SCRAPER_UPX::1"
+        echo "::add-path::$HOME/.local/bin"
+    - name: Set Poetry config
+      run: poetry config virtualenvs.path ${{ matrix.venv_dir }}
+    - name: Install deps python
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        poetry install -E gui
+        poetry show -v
+        dir .
+        dir ~
+        dir ~\.virtualenvs
     - name: Build file using pyinstaller
-      run: python -m poetry run pyinstaller build.spec
-    - name: Upload to release
-      uses: svenstaro/upload-release-action@v1-release
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: dist/${{ matrix.artifact_name }}
-        asset_name: ${{ matrix.asset_name }}
-        tag: ${{ github.ref }}
+      run: poetry run pyinstaller build.spec
+    # - name: Upload to release
+    #   uses: svenstaro/upload-release-action@v1-release
+    #   with:
+    #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+    #     file: dist/${{ matrix.artifact_name }}
+    #     asset_name: ${{ matrix.asset_name }}
+    #     tag: ${{ github.ref }}
