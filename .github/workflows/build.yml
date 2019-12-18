@@ -10,11 +10,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, ubuntu-16.04]
         include:
           - os: windows-latest
             artifact_name: ImpartusScraper.exe
             asset_name: impartus-scraper-windows.exe
+        include:
+          - os: ubuntu-16.04
+            artifact_name: ImpartusScraper
+            asset_name: impartus-scraper-linux
     steps:
     - uses: actions/checkout@v1
     - uses: actions/setup-python@v1.1.1
@@ -25,10 +29,17 @@ jobs:
       run: |
         Invoke-WebRequest https://www.7-zip.org/a/7z1900-x64.exe -OutFile 7z.exe
         Invoke-WebRequest https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip -OutFile ffmpeg.zip
-        Invoke-WebRequest https://github.com/upx/upx/releases/download/v3.95/upx-3.95-win64.zip -OutFile upx.zip
+        # Invoke-WebRequest https://github.com/upx/upx/releases/download/v3.95/upx-3.95-win64.zip -OutFile upx.zip
+        # 7z.exe e upx.zip upx.exe -r
         7z.exe e ffmpeg.zip ffmpeg.exe -r
-        7z.exe e upx.zip upx.exe -r
         echo "::add-path::%cd%"
+    - name: Install deps ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg pkg-config upx libgtk-3-dev
+          echo "::set-env name=ILC_SCRAPER_UPX::1"
+          echo "::add-path::$HOME/.local/bin"
     - name: Install deps python
       run: |
         pip install poetry --user
