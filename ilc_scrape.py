@@ -27,7 +27,7 @@ IMP_STREAM_URL = "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
 IMP_LECTURES_URL = "api/subjects/{}/lectures/{}"
 
 CATALOG_PAT = re.compile(
-    r"(?P<base>(https?://)?((172\.16\.3\.20)|(a.impartus.com))/)"
+    r"(?P<base>(https?://)?((172\.16\.3\.20)|((a|bitshyd).impartus.com))/)"
     r"ilc/#/course/(?P<subject>\d+)/(?P<lec>\d+)/?"
 )
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
