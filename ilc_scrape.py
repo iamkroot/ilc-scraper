@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import multiprocessing
-import os
 import re
 import subprocess as sp
 from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 from downloader import download_stream
@@ -33,6 +33,8 @@ CATALOG_PAT = re.compile(
 )
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
 
+ANGLE_CHOICES = ("both", "right", "left")
+
 
 @Gooey(
     program_name="Impartus Scraper",
@@ -51,12 +53,10 @@ def parse_args(config, course_api_urls=None):
         return match[0]
 
     def validate_url(url):
-        global IMP_BASE_URL
         match = CATALOG_PAT.match(url)
         if not match:
             raise ArgumentTypeError("URL doesn't match required pattern.")
-        IMP_BASE_URL = match["base"]
-        return IMP_BASE_URL + IMP_LECTURES_URL.format(match["subject"], match["lec"])
+        return match["base"] + IMP_LECTURES_URL.format(match["subject"], match["lec"])
 
     creds = config.get("creds", {})
     parser = GooeyParser(
@@ -129,6 +129,20 @@ def parse_args(config, course_api_urls=None):
         help="Get all lectures after the last downloaded one.",
     )
     main_args.add_argument(
+        "-a",
+        "--angle",
+        default="both",
+        choices=ANGLE_CHOICES,
+        help="The camera angle(s) to download",
+    )
+    main_args.add_argument(
+        "-q",
+        "--quality",
+        default="720p",
+        choices=["720p", "450p"],
+        help="Video quality of the downloaded lectures",
+    )
+    main_args.add_argument(
         "-d",
         "--dest",
         default=config.get("save_fold", SCRIPT_DIR / "Impartus Lectures"),
@@ -142,7 +156,7 @@ def parse_args(config, course_api_urls=None):
         "--worker_processes",
         default=1,
         type=int,
-        choices=range(1, (os.cpu_count() or 1) + 1),
+        choices=[1, 2],  # no clear benefit of using more than 2 workers
         help="Number of CPU cores to utilize.",
     )
     others.add_argument(
@@ -166,11 +180,21 @@ def parse_args(config, course_api_urls=None):
     return parser.parse_args()
 
 
+def get_course_url(args, course_urls):
+    course_lectures_url = course_urls.get(getattr(args, "name", None), args.course_url)
+    split = urlsplit(course_lectures_url)
+    global IMP_BASE_URL
+    # support for different domains
+    IMP_BASE_URL = split.scheme + "://" + split.hostname + "/"
+    return course_lectures_url
+
+
 def login(username, password):
     payload = {"username": username, "password": password}
     try:
         response = requests.post(IMP_BASE_URL + IMP_LOGIN_URL, data=payload, timeout=3)
-    except requests.ConnectionError:
+    except requests.ConnectionError as e:
+        print(e)
         print_quit("Connection Error")
     if response.status_code != 200:
         print_quit("Invalid username/password. Try again.")
@@ -225,8 +249,9 @@ def main():
     if args.save_creds:
         config["creds"] = {"username": args.username, "password": args.password}
         store_json(config, CONFIG_FILE)
+
+    course_lectures_url = get_course_url(args, data["urls"])
     token = login(args.username, args.password)
-    course_lectures_url = data["urls"].get(getattr(args, "name", None), args.course_url)
 
     headers = {"Authorization": "Bearer " + token}
     response = requests.get(course_lectures_url, headers=headers)
@@ -273,7 +298,14 @@ def main():
             ttid = lecture["ttid"]
             stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
             pool.apply_async(
-                download_stream, (token, stream_url, working_dir / file_name)
+                func=download_stream,
+                kwds={
+                    "token": token,
+                    "stream_url": stream_url,
+                    "output_file": working_dir / file_name,
+                    "quality": args.quality,
+                    "angle": ANGLE_CHOICES.index(args.angle),
+                },
             )
         pool.close()
         pool.join()
