@@ -3,6 +3,7 @@ import tempfile
 from itertools import chain
 from multiprocessing import Process
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 from utils import find_startswith, sp_args
@@ -41,6 +42,7 @@ def get_variant_playlist(stream_url, quality):
 
 
 def get_angle_playlists(variant_pls):
+    """Split the playlist into two at #EXT-X-DISCONTINUITY, one for each angle"""
     pls = variant_pls.splitlines()
     headers_end = find_startswith(pls, "#EXT-X-KEY")
     headers = pls[:headers_end]
@@ -63,7 +65,7 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
         "-protocol_whitelist",
         "file,http,tcp,tls,crypto",
     ]
-    cookies_arg = ("-cookies", f"Bearer={token}; path=/")
+    cookies_arg = ("-cookies", f"Bearer={token}; path=/")  # needed to get auth to work
     variant_pls = get_variant_playlist(stream_url, quality)
     if not variant_pls:
         print("Some error while getting", stream_url)
@@ -75,9 +77,12 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
         file_name = f"{output_file.stem}_{quality}_{angle_num}.m3u8"
         with open(temp_dir / file_name, "w") as f:
             f.write(angle_pls)
-        cmd += cookies_arg + ("-i", f"http://localhost:{PORT}/{file_name}")
+        # the -cookies flag is only recognized by ffmpeg when the input is via http
+        # so we serve the hls playlist via an http server, and send that as input
+        cmd += cookies_arg + ("-i", f"http://localhost:{PORT}/{quote(file_name)}")
 
     if not angle:
+        # map all the input audio and video streams into separate tracks in output
         cmd += chain.from_iterable(
             ("-map", f"{i}:0", "-map", f"{i}:2") for i in range(len(angle_playlists))
         )
