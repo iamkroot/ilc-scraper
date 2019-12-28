@@ -6,6 +6,7 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 * Awesome GUI!
 	![GUI](assets/screenshot.png)
 * Download lectures without subscribing to them.
+* **NEW:** Download BOTH the camera views. (Saved as video tracks in output file)
 * Specify ranges to limit the lectures to be downloaded.
 * Fuzzy searching of course names.
 * Skips already downloaded lectures.
