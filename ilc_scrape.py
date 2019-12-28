@@ -3,13 +3,14 @@ import multiprocessing
 import os
 import re
 import subprocess as sp
-import urllib
-import requests
 from argparse import ArgumentTypeError
 from difflib import get_close_matches
 from multiprocessing.pool import Pool
 from pathlib import Path
-from utils import sp_args, print_quit, read_json, store_json, sanitize_filepath
+
+import requests
+from downloader import download_stream
+from utils import print_quit, read_json, sanitize_filepath, sp_args, store_json
 
 try:
     from gooey import Gooey, GooeyParser
@@ -271,50 +272,12 @@ def main():
                 continue
             ttid = lecture["ttid"]
             stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
-            lec_duration = lecture.get("actualDuration")
             pool.apply_async(
-                download_stream, (stream_url, working_dir / file_name, lec_duration)
+                download_stream, (token, stream_url, working_dir / file_name)
             )
         pool.close()
         pool.join()
     print("Finished!")
-
-
-def get_stream_duration(stream_url):
-    """Calculate total length of the stream from the m3u8 playlist file"""
-    master_resp = requests.get(stream_url).text  # master playlist
-    actual_url = urllib.parse.unquote(master_resp.strip().split()[-1])
-    stream_pl = requests.get(actual_url).text  # playlist for single stream
-    top = stream_pl.find("#EXT-X-KEY")
-    end = stream_pl.find("#EXT-X-DISCONTINUITY")
-    stream_1 = stream_pl[top:end]
-    m = re.findall(r"#EXTINF:(?P<dur>\d+\.\d+)", stream_1)
-    return int(sum(map(float, m)))
-
-
-def download_stream(stream_url: str, output_file: Path, duration=None):
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-xerror",
-        "-loglevel",
-        "fatal",
-        "-i",
-        stream_url,
-        "-c",
-        "copy",
-    ]
-
-    try:
-        duration = duration or get_stream_duration(stream_url)
-    except Exception as e:
-        print(f"Error while trying to get duration for {output_file.name}.", e)
-    else:
-        cmd += ("-t", str(duration))
-    cmd.append(str(output_file))
-    print("Downloading", output_file.name)
-    sp.call(cmd, **sp_args)
-    print("Downloaded", output_file.name)
 
 
 if __name__ == "__main__":

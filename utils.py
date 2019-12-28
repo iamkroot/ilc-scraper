@@ -109,3 +109,13 @@ VALID_CHARS = "-_.() " + string.ascii_letters + string.digits
 def sanitize_filepath(filename):
     cleaned = unicodedata.normalize("NFKD", filename).encode("ASCII", "ignore")
     return "".join(chr(c) for c in cleaned if chr(c) in VALID_CHARS)
+
+
+def find_startswith(lines, s, rev=False):
+    """Find the first/last string a list which starts with 's'"""
+    lines = enumerate(lines)
+    if rev:
+        lines = reversed(tuple(lines))
+    for i, line in lines:
+        if line.startswith(s):
+            return i
