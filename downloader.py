@@ -1,5 +1,7 @@
 import subprocess as sp
 import tempfile
+from functools import partial
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from itertools import chain
 from multiprocessing import Process
 from pathlib import Path
@@ -8,17 +10,23 @@ from urllib.parse import quote
 import requests
 from utils import find_startswith, sp_args
 
-PORT = 2369  # Just some random port
 temp_dir = Path(tempfile.gettempdir())
 
 
-def serve_dir(path):
+class DirServer(Process):
     """Serve the given directory using a simple HTTP server on localhost."""
-    Process(
-        target=sp.run,
-        args=[["python", "-m", "http.server", str(PORT), "-d", str(path)]],
-        kwargs=sp_args
-    ).start()
+
+    PORT = 2369  # Just some random port
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.daemon = True
+
+    def run(self):
+        SimpleHTTPRequestHandler.log_message = lambda *a, **kw: None
+        handler_class = partial(SimpleHTTPRequestHandler, directory=str(temp_dir))
+        self.server = HTTPServer(("localhost", self.PORT), handler_class)
+        self.server.serve_forever()
 
 
 def get_variants(stream_url):
@@ -79,7 +87,10 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
             f.write(angle_pls)
         # the -cookies flag is only recognized by ffmpeg when the input is via http
         # so we serve the hls playlist via an http server, and send that as input
-        cmd += cookies_arg + ("-i", f"http://localhost:{PORT}/{quote(file_name)}")
+        cmd += cookies_arg + (
+            "-i",
+            f"http://localhost:{DirServer.PORT}/{quote(file_name)}",
+        )
 
     if not angle:
         # map all the input audio and video streams into separate tracks in output
@@ -91,6 +102,3 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
     print("Downloading", output_file.name)
     sp.call(cmd, **sp_args)
     print("Downloaded", output_file.name)
-
-
-serve_dir(temp_dir)  # serve the dir which stores the angle playlists

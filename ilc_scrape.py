@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
-from downloader import download_stream
+from downloader import DirServer, download_stream
 from utils import print_quit, read_json, sanitize_filepath, sp_args, store_json
 
 try:
@@ -193,9 +193,8 @@ def login(username, password):
     payload = {"username": username, "password": password}
     try:
         response = requests.post(IMP_BASE_URL + IMP_LOGIN_URL, data=payload, timeout=3)
-    except requests.ConnectionError as e:
-        print(e)
-        print_quit("Connection Error")
+    except (requests.ConnectionError, requests.Timeout) as e:
+        print_quit("Connection Error", e)
     if response.status_code != 200:
         print_quit("Invalid username/password. Try again.")
     return response.json()["token"]
@@ -236,6 +235,34 @@ def rename_old(downloaded, lectures):
                 break
 
 
+def download(token, lecture_ids, lectures, work_dir, args):
+    print("Downloading the following lecture numbers:", *sorted(lecture_ids))
+    with Pool(args.worker_processes) as pool:
+        for lecture in reversed(lectures):  # Download lecture #1 first
+            lec_no = lecture["seqNo"]
+            if lec_no not in lecture_ids:
+                continue
+            file_name = make_filename(lecture)
+            if not args.keep_no_class and "no class" in file_name.lower():
+                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
+                continue
+            ttid = lecture["ttid"]
+            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
+            pool.apply_async(
+                func=download_stream,
+                kwds={
+                    "token": token,
+                    "stream_url": stream_url,
+                    "output_file": work_dir / file_name,
+                    "quality": args.quality,
+                    "angle": ANGLE_CHOICES.index(args.angle),
+                },
+            )
+        pool.close()
+        pool.join()
+    print("Finished!")
+
+
 def main():
     try:
         sp.check_call(["ffmpeg", "-version"], **dict(sp_args, stdout=sp.DEVNULL))
@@ -272,7 +299,7 @@ def main():
         downloaded: dict = {
             int(file.stem[:2]): file
             for file in working_dir.glob("[0-9][0-9].*.mkv")
-            if int(file.stem[: file.stem.find(".")]) in lecture_ids
+            if int(file.stem[:2]) in lecture_ids
         }
         if downloaded:
             if args.rename:
@@ -285,31 +312,12 @@ def main():
     if not lecture_ids:
         print_quit("No lectures to download. Exiting.", 0)
 
-    print("Downloading the following lecture numbers:", *sorted(lecture_ids))
-    with Pool(args.worker_processes) as pool:
-        for lecture in reversed(lectures):  # Download lecture #1 first
-            lec_no = lecture["seqNo"]
-            if lec_no not in lecture_ids:
-                continue
-            file_name = make_filename(lecture)
-            if not args.keep_no_class and "no class" in file_name.lower():
-                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
-                continue
-            ttid = lecture["ttid"]
-            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
-            pool.apply_async(
-                func=download_stream,
-                kwds={
-                    "token": token,
-                    "stream_url": stream_url,
-                    "output_file": working_dir / file_name,
-                    "quality": args.quality,
-                    "angle": ANGLE_CHOICES.index(args.angle),
-                },
-            )
-        pool.close()
-        pool.join()
-    print("Finished!")
+    dir_server = DirServer()
+    dir_server.start()
+    try:
+        download(token, lecture_ids, lectures, working_dir, args)
+    finally:
+        dir_server.terminate()
 
 
 if __name__ == "__main__":
