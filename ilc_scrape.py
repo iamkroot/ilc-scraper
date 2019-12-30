@@ -157,7 +157,7 @@ def parse_args(config, course_api_urls=None):
         default=1,
         type=int,
         choices=[1, 2],  # no clear benefit of using more than 2 workers
-        help="Number of CPU cores to utilize.",
+        help="Maximum CPU cores to utilize (real number may vary).",
     )
     others.add_argument(
         "-f",
@@ -235,34 +235,6 @@ def rename_old(downloaded, lectures):
                 break
 
 
-def download(token, lecture_ids, lectures, work_dir, args):
-    print("Downloading the following lecture numbers:", *sorted(lecture_ids))
-    with Pool(args.worker_processes) as pool:
-        for lecture in reversed(lectures):  # Download lecture #1 first
-            lec_no = lecture["seqNo"]
-            if lec_no not in lecture_ids:
-                continue
-            file_name = make_filename(lecture)
-            if not args.keep_no_class and "no class" in file_name.lower():
-                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
-                continue
-            ttid = lecture["ttid"]
-            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
-            pool.apply_async(
-                func=download_stream,
-                kwds={
-                    "token": token,
-                    "stream_url": stream_url,
-                    "output_file": work_dir / file_name,
-                    "quality": args.quality,
-                    "angle": ANGLE_CHOICES.index(args.angle),
-                },
-            )
-        pool.close()
-        pool.join()
-    print("Finished!")
-
-
 def main():
     try:
         sp.check_call(["ffmpeg", "-version"], **dict(sp_args, stdout=sp.DEVNULL))
@@ -312,12 +284,32 @@ def main():
     if not lecture_ids:
         print_quit("No lectures to download. Exiting.", 0)
 
-    dir_server = DirServer()
-    dir_server.start()
-    try:
-        download(token, lecture_ids, lectures, working_dir, args)
-    finally:
-        dir_server.terminate()
+    DirServer()  # start serving the temp directory
+    print("Downloading the following lecture numbers:", *sorted(lecture_ids))
+    with Pool(args.worker_processes) as pool:
+        for lecture in reversed(lectures):  # Download lecture #1 first
+            lec_no = lecture["seqNo"]
+            if lec_no not in lecture_ids:
+                continue
+            file_name = make_filename(lecture)
+            if not args.keep_no_class and "no class" in file_name.lower():
+                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
+                continue
+            ttid = lecture["ttid"]
+            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
+            pool.apply_async(
+                func=download_stream,
+                kwds={
+                    "token": token,
+                    "stream_url": stream_url,
+                    "output_file": working_dir / file_name,
+                    "quality": args.quality,
+                    "angle": ANGLE_CHOICES.index(args.angle),
+                },
+            )
+        pool.close()
+        pool.join()
+    print("Finished!")
 
 
 if __name__ == "__main__":
