@@ -212,7 +212,7 @@ def parse_lec_ranges(ranges: str, total_lecs: int) -> set:
         m = RANGE_PAT.match(r)
         if not m:
             print_quit(f'Invalid range "{r}"')
-        start = int(m["l"] or 0)
+        start = int(m["l"] or 1)
         end = start + 1 if m["r"] is None else int(m["r"] or total_lecs + 1)
         if start >= end:
             print_quit(f'Invalid range "{r}"')
@@ -287,31 +287,44 @@ def main():
     if not lecture_ids:
         print_quit("No lectures to download. Exiting.", 0)
 
-    DirServer()  # start serving the temp directory
-    print("Downloading the following lecture numbers:", *sorted(lecture_ids))
-    with ThreadPool(args.worker_processes) as pool:
-        for lecture in reversed(lectures):  # Download lecture #1 first
-            lec_no = lecture["seqNo"]
-            if lec_no not in lecture_ids:
-                continue
-            file_name = make_filename(lecture)
-            if not args.keep_no_class and "no class" in file_name.lower():
-                print(f"Skipping lecture {lec_no} as it has 'no class' in title.")
-                continue
-            ttid = lecture["ttid"]
-            stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(ttid, token)
-            pool.apply_async(
-                func=download_stream,
-                kwds={
-                    "token": token,
-                    "stream_url": stream_url,
-                    "output_file": working_dir / file_name,
-                    "quality": args.quality,
-                    "angle": ANGLE_CHOICES.index(args.angle),
-                },
+    no_class = []
+    task_args = []
+    for lecture in reversed(lectures):  # Download lecture #1 first
+        lec_no = lecture["seqNo"]
+
+        if lec_no not in lecture_ids:
+            continue
+
+        file_name = make_filename(lecture)
+
+        if not args.keep_no_class and "no class" in file_name.lower():
+            no_class.append(lec_no)
+            continue
+
+        stream_url = IMP_BASE_URL + IMP_STREAM_URL.format(lecture["ttid"], token)
+        task_args.append(
+            (
+                token,
+                stream_url,
+                working_dir / file_name,
+                args.quality,
+                ANGLE_CHOICES.index(args.angle),
             )
-        pool.close()
-        pool.join()
+        )
+
+    if no_class:
+        print("Skipping lectures with 'no class' in title:", *no_class)
+
+    print("Downloading lecture numbers:", *sorted(lecture_ids.difference(no_class)))
+
+    DirServer()  # start serving the temp directory
+    with ThreadPool(args.worker_processes) as pool:
+        try:
+            pool.starmap(download_stream, task_args)
+            pool.close()
+            pool.join()
+        except KeyboardInterrupt:
+            print_quit("Aborted.", 1)
     print("Finished!")
 
 
