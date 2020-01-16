@@ -4,7 +4,7 @@ import re
 import subprocess as sp
 from argparse import ArgumentTypeError
 from difflib import get_close_matches
-from multiprocessing.pool import Pool
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -289,7 +289,7 @@ def main():
 
     DirServer()  # start serving the temp directory
     print("Downloading the following lecture numbers:", *sorted(lecture_ids))
-    with Pool(args.worker_processes) as pool:
+    with ThreadPool(args.worker_processes) as pool:
         for lecture in reversed(lectures):  # Download lecture #1 first
             lec_no = lecture["seqNo"]
             if lec_no not in lecture_ids:

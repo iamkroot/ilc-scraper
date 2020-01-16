@@ -3,7 +3,7 @@ import tempfile
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from itertools import chain
-from multiprocessing import Process
+from multiprocessing.dummy import Process
 from pathlib import Path
 from urllib.parse import quote
 
