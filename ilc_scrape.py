@@ -194,7 +194,7 @@ def login(username, password):
     try:
         response = requests.post(IMP_BASE_URL + IMP_LOGIN_URL, data=payload, timeout=3)
     except (requests.ConnectionError, requests.Timeout) as e:
-        print_quit("Connection Error", e)
+        print_quit(f"Connection Error {e}")
     if response.status_code >= 500:
         print_quit("Impartus not responding properly", 1)
     resp = response.json()
@@ -270,20 +270,24 @@ def main():
     store_json(data, DATA_FILE)
 
     lecture_ids = parse_lec_ranges(args.range, total_lecs)
-    if not args.force or args.only_new:
-        downloaded: dict = {
-            int(file.stem[:2]): file
-            for file in working_dir.glob("[0-9][0-9].*.mkv")
-            if int(file.stem[:2]) in lecture_ids
-        }
-        if downloaded:
-            if args.rename:
-                rename_old(downloaded, lectures)
-            if args.only_new:
-                lecture_ids.difference_update(range(max(downloaded) + 1))
-            else:
-                print("Skipping already downloaded lectures:", *sorted(downloaded))
-                lecture_ids.difference_update(downloaded)
+
+    downloaded: dict = {
+        int(file.stem[:2]): file
+        for file in working_dir.glob("[0-9][0-9].*.mkv")
+        if int(file.stem[:2]) in lecture_ids
+    }
+    if downloaded:
+        if args.rename:
+            rename_old(downloaded, lectures)
+        if args.only_new:
+            lecture_ids.difference_update(range(max(downloaded) + 1))
+        elif args.force:
+            print("Force option enabled. Deleting old lectures:", *sorted(downloaded))
+            for file in downloaded.values():
+                file.unlink()
+        else:
+            print("Skipping already downloaded lectures:", *sorted(downloaded))
+            lecture_ids.difference_update(downloaded)
     if not lecture_ids:
         print_quit("No lectures to download. Exiting.", 0)
 
