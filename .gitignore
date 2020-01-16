@@ -6,3 +6,4 @@ dist
 *.tmp
 ilc.sublime-project
 ilc.sublime-workspace
+*.exe
