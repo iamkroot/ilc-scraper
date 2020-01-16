@@ -195,9 +195,12 @@ def login(username, password):
         response = requests.post(IMP_BASE_URL + IMP_LOGIN_URL, data=payload, timeout=3)
     except (requests.ConnectionError, requests.Timeout) as e:
         print_quit("Connection Error", e)
-    if response.status_code != 200:
-        print_quit("Invalid username/password. Try again.")
-    return response.json()["token"]
+    if response.status_code >= 500:
+        print_quit("Impartus not responding properly", 1)
+    resp = response.json()
+    if not resp["success"]:
+        print_quit("Impartus:" + resp["message"], 1)
+    return resp["token"]
 
 
 def parse_lec_ranges(ranges: str, total_lecs: int) -> set:
