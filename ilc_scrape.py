@@ -182,6 +182,8 @@ def parse_args(config, course_api_urls=None):
 
 def get_course_url(args, course_urls):
     course_lectures_url = course_urls.get(getattr(args, "name", None), args.course_url)
+    if not course_lectures_url.startswith("http"):
+        course_lectures_url = "http://" + course_lectures_url
     split = urlsplit(course_lectures_url)
     global IMP_BASE_URL
     # support for different domains
