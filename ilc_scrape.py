@@ -323,8 +323,7 @@ def main():
 
     print("Downloading lecture numbers:", *sorted(lecture_ids.difference(no_class)))
 
-    DirServer()  # start serving the temp directory
-    with ThreadPool(args.worker_processes) as pool:
+    with DirServer(), ThreadPool(args.worker_processes) as pool:
         try:
             pool.starmap(download_stream, task_args)
             pool.close()

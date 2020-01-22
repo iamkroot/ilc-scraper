@@ -10,8 +10,6 @@ from urllib.parse import quote
 import requests
 from utils import find_startswith, sp_args
 
-temp_dir = Path(tempfile.gettempdir())
-
 
 class DirServer(Process):
     """Serve the given directory using a simple HTTP server on localhost."""
@@ -24,20 +22,44 @@ class DirServer(Process):
             cls._dir_server = super().__new__(cls, *args, **kwargs)
         return cls._dir_server
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dir_=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.daemon = True
+        self.temp = dir_ is None
+        if self.temp:  # Create a temp directory
+            self.temp_dir = tempfile.TemporaryDirectory(prefix="ilc-scraper")
+            self.dir = Path(self.temp_dir.name)
+        else:  # Use given directory
+            self.dir = Path(dir_)
+            assert self.dir.exists()
+
+        SimpleHTTPRequestHandler.log_message = lambda *a, **kw: None
+        handler_class = partial(SimpleHTTPRequestHandler, directory=self.dir)
+        self.server = HTTPServer(("localhost", self.PORT), handler_class)
+
+    def __enter__(self):
         self.start()
+        return self
+
+    def __exit__(self, *exc_info):
+        if self.temp:
+            self.temp_dir.cleanup()
+
+        if exc_info and exc_info[0] and exc_info[0] != SystemExit:
+            print(*exc_info)
 
     def run(self):
-        SimpleHTTPRequestHandler.log_message = lambda *a, **kw: None
-        handler_class = partial(SimpleHTTPRequestHandler, directory=str(temp_dir))
-        self.server = HTTPServer(("localhost", self.PORT), handler_class)
         self.server.serve_forever()
 
     @classmethod
-    def get_url(cls, file_name):
-        return f"http://localhost:{cls.PORT}/{quote(file_name)}"
+    def get_url(cls, file_content):
+        """Create a temp file with given contents and return its URL"""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".m3u8", dir=cls._dir_server.dir, delete=False
+        ) as f:
+            f.write(file_content)
+            name = Path(f.name).name
+        return f"http://localhost:{cls.PORT}/{quote(name)}"
 
 
 def get_variants(stream_url):
@@ -81,12 +103,9 @@ def add_inputs(token, cmd, angle_playlists, output_file, quality, angle):
     for angle_num, angle_pls in angle_playlists.items():
         if angle and angle_num != angle:
             continue
-        file_name = f"{output_file.stem}_{quality}_{angle_num}.m3u8"
-        with open(temp_dir / file_name, "w") as f:
-            f.write(angle_pls)
         # the -cookies flag is only recognized by ffmpeg when the input is via http
         # so we serve the hls playlist via an http server, and send that as input
-        cmd += cookies_arg + ("-i", DirServer.get_url(file_name))
+        cmd += cookies_arg + ("-i", DirServer.get_url(angle_pls))
 
     if not angle:
         # map all the input audio and video streams into separate tracks in output
