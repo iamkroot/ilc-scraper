@@ -118,7 +118,7 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
     cmd = [
         "ffmpeg",
         "-loglevel",
-        "fatal",
+        "error",
         "-protocol_whitelist",
         "file,http,tcp,tls,crypto",
     ]
@@ -128,7 +128,13 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
         return
     angle_playlists = get_angle_playlists(variant_pls)
     add_inputs(token, cmd, angle_playlists, output_file, quality, angle)
+
     cmd += ["-c", "copy", str(output_file)]
+
     print("Downloading", output_file.name)
-    sp.call(cmd, **sp_args)
-    print("Downloaded", output_file.name)
+    # TODO: Display ffmpeg download progress by parsing output
+    proc = sp.run(cmd, text=True, **sp_args)
+    if proc.returncode:
+        print("ffmpeg error:", proc.stderr, "for", output_file.name)
+    else:
+        print("Downloaded", output_file.name)
