@@ -34,9 +34,10 @@ jobs:
       id: cache
       uses: actions/cache@v1
       with:
-        path: ~/.virtualenvs
-        key: poetry-${{ hashFiles('**/poetry.lock') }}
-        restore-keys: poetry-${{ hashFiles('**/poetry.lock') }}
+        path: ~/.cache/pypoetry
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-
     - name: Install deps win
       if: runner.os == 'Windows'
       run: |
