@@ -34,7 +34,7 @@ jobs:
       id: cache
       uses: actions/cache@v1
       with:
-        path: ~/.cache/pypoetry
+        path: ${{ matrix.venv_dir }}
         key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
           ${{ runner.os }}-poetry-
