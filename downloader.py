@@ -14,7 +14,6 @@ from utils import find_startswith, sp_args
 class DirServer(Process):
     """Serve the given directory using a simple HTTP server on localhost."""
 
-    PORT = 2369  # Just some random port
     _dir_server = None  # Singleton instance
 
     def __new__(cls, *args, **kwargs):
@@ -35,7 +34,8 @@ class DirServer(Process):
 
         SimpleHTTPRequestHandler.log_message = lambda *a, **kw: None
         handler_class = partial(SimpleHTTPRequestHandler, directory=self.dir)
-        self.server = HTTPServer(("localhost", self.PORT), handler_class)
+        self.server = HTTPServer(("localhost", 0), handler_class)
+        self.port = self.server.server_port
 
     def __enter__(self):
         self.start()
@@ -59,7 +59,7 @@ class DirServer(Process):
         ) as f:
             f.write(file_content)
             name = Path(f.name).name
-        return f"http://localhost:{cls.PORT}/{quote(name)}"
+        return f"http://localhost:{cls._dir_server.port}/{quote(name)}"
 
 
 def get_variants(stream_url):
