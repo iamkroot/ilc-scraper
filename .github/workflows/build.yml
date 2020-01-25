@@ -15,11 +15,11 @@ jobs:
           - os: windows-latest
             artifact_name: ImpartusScraper.exe
             asset_name: impartus-scraper-windows.exe
-            venv_dir: "%USERPROFILE%\\.virtualenvs"
+            venv_dir: ~\.virtualenvs
           - os: ubuntu-16.04
             artifact_name: ImpartusScraper
             asset_name: impartus-scraper-linux
-            venv_dir: $HOME/.virtualenvs
+            venv_dir: ~/.virtualenvs
     steps:
     - uses: actions/checkout@v1
       with:
@@ -34,7 +34,7 @@ jobs:
       id: cache
       uses: actions/cache@v1
       with:
-        path: ${{ matrix.venv_dir }}
+        path: ~/.virtualenvs
         key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
           ${{ runner.os }}-poetry-
