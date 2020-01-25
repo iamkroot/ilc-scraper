@@ -107,7 +107,7 @@ def add_inputs(token, cmd, angle_playlists, angle):
     if angle > len(angle_playlists):
         print(
             f"Invalid angle {angle} selected.",
-            f"Downloading available angles: {', '.join(angle_playlists)}."
+            f"Downloading available angles: {', '.join(angle_playlists)}.",
         )
         angle = 0
 
@@ -120,10 +120,12 @@ def add_inputs(token, cmd, angle_playlists, angle):
 
     if not angle:
         # map all the input audio and video streams into separate tracks in output
-        # TODO: Extract only one audio and two video tracks instead of all
         cmd += chain.from_iterable(
-            ("-map", str(i)) for i in range(len(angle_playlists))
+            ("-map", f"{i}:v:0") for i in range(len(angle_playlists))
         )
+    else:
+        cmd.extend(("-map", "0:v:0"))
+    cmd.extend(("-map", "0:a:0"))  # get first audio stream (assuming all are in sync)
 
 
 def download_stream(token, stream_url, output_file: Path, quality="720p", angle=0):
