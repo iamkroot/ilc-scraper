@@ -88,6 +88,9 @@ def get_angle_playlists(variant_pls):
     headers_end = find_startswith(pls, "#EXT-X-KEY")
     headers = pls[:headers_end]
     angle1_end = find_startswith(pls, "#EXT-X-DISCONTINUITY")
+    if angle1_end is None:  # only one angle is present
+        return {1: variant_pls}
+
     angle1 = pls[:angle1_end] + ["#EXT-X-ENDLIST", ""]
 
     angle2 = pls[angle1_end + 1 :]
@@ -98,8 +101,16 @@ def get_angle_playlists(variant_pls):
     return {1: "\n".join(angle1), 2: "\n".join(angle2)}
 
 
-def add_inputs(token, cmd, angle_playlists, output_file, quality, angle):
+def add_inputs(token, cmd, angle_playlists, angle):
     cookies_arg = ("-cookies", f"Bearer={token}; path=/")  # needed to get auth to work
+
+    if angle > len(angle_playlists):
+        print(
+            f"Invalid angle {angle} selected.",
+            f"Downloading available angles: {', '.join(angle_playlists)}."
+        )
+        angle = 0
+
     for angle_num, angle_pls in angle_playlists.items():
         if angle and angle_num != angle:
             continue
@@ -109,8 +120,9 @@ def add_inputs(token, cmd, angle_playlists, output_file, quality, angle):
 
     if not angle:
         # map all the input audio and video streams into separate tracks in output
+        # TODO: Extract only one audio and two video tracks instead of all
         cmd += chain.from_iterable(
-            ("-map", f"{i}:0", "-map", f"{i}:2") for i in range(len(angle_playlists))
+            ("-map", str(i)) for i in range(len(angle_playlists))
         )
 
 
@@ -127,7 +139,7 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
         print("Some error while getting", stream_url)
         return
     angle_playlists = get_angle_playlists(variant_pls)
-    add_inputs(token, cmd, angle_playlists, output_file, quality, angle)
+    add_inputs(token, cmd, angle_playlists, angle)
 
     cmd += ["-c", "copy", str(output_file)]
 
