@@ -2,10 +2,6 @@
 
 This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilani Hyderabad Campus. No more crying when Impartus servers crash during exam time because of overload. You can even access lectures from previous years in case your current prof sucks :P
 
-### WARNING
-
-The script has stopped working due to some changes in the video feed of Impartus. If someone wants to reverse engineer the stream and get it working again, please make a PR.
-
 ## Features
 * Awesome GUI!
 	![GUI](assets/screenshot.png)

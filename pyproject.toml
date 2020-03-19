@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ilc-scraper"
-version = "0.5.1"
+version = "0.6.0"
 description = "A scraper for Impartus Lecture Capture videos for BITS Hyderabad"
 authors = ["iamkroot <kroot.patel@gmail.com>"]
 readme = "README.md"
