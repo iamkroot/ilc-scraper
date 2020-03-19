@@ -1,14 +1,17 @@
+import re
 import subprocess as sp
 import tempfile
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from itertools import chain
 from multiprocessing.dummy import Process
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, parse_qsl, urlparse
 
 import requests
 from utils import find_startswith, sp_args
+
+TEMP_DIR = tempfile.TemporaryDirectory(prefix="ilc-scraper")
+TEMP_DIR_PATH = Path(TEMP_DIR.name)
 
 
 class DirServer(Process):
@@ -18,7 +21,7 @@ class DirServer(Process):
 
     def __new__(cls, *args, **kwargs):
         if not cls._dir_server:
-            cls._dir_server = super().__new__(cls, *args, **kwargs)
+            cls._dir_server = super().__new__(cls)
         return cls._dir_server
 
     def __init__(self, dir_=None, *args, **kwargs):
@@ -26,8 +29,8 @@ class DirServer(Process):
         self.daemon = True
         self.temp = dir_ is None
         if self.temp:  # Create a temp directory
-            self.temp_dir = tempfile.TemporaryDirectory(prefix="ilc-scraper")
-            self.dir = Path(self.temp_dir.name)
+            self.temp_dir = TEMP_DIR
+            self.dir = TEMP_DIR_PATH
         else:  # Use given directory
             self.dir = Path(dir_)
             assert self.dir.exists()
@@ -89,7 +92,7 @@ def get_angle_playlists(variant_pls):
     headers = pls[:headers_end]
     angle1_end = find_startswith(pls, "#EXT-X-DISCONTINUITY")
     if angle1_end is None:  # only one angle is present
-        return {1: variant_pls}
+        return {1: pls}
 
     angle1 = pls[:angle1_end] + ["#EXT-X-ENDLIST", ""]
 
@@ -98,12 +101,33 @@ def get_angle_playlists(variant_pls):
         last_key = find_startswith(angle1, "#EXT-X-KEY", rev=True)
         angle2.insert(0, angle1[last_key])
     angle2 = headers + angle2
-    return {1: "\n".join(angle1), 2: "\n".join(angle2)}
+    return {1: angle1, 2: angle2}
+
+
+def extract_enc_keys(angle_pls: list, token):
+    sess = requests.Session()
+    sess.cookies.set("Bearer", token)
+    PAT = re.compile(r'URI="(?P<key_url>.*?)"')
+    for i, line in enumerate(angle_pls):
+        if not line.startswith("#EXT-X-KEY"):
+            continue
+        key_url = PAT.search(line)["key_url"]
+        key_info = dict(parse_qsl(urlparse(key_url).query))
+        orig_key = sess.get(key_url).content
+        real_key = orig_key[::-1][:16]
+        tmp_path = TEMP_DIR_PATH / "{ttid}_{keyid}.key".format(**key_info)
+        tmp_path.write_bytes(real_key)
+        angle_pls[i] = PAT.sub(f'URI="{tmp_path.resolve().as_uri()}"', line)
 
 
 def add_inputs(token, cmd, angle_playlists, angle):
     cookies_arg = ("-cookies", f"Bearer={token}; path=/")  # needed to get auth to work
-
+    extra_arg = (
+        "-allowed_extensions",
+        "key,m3u8,ts",
+        "-protocol_whitelist",
+        "file,http,tcp,tls,crypto",
+    )
     if angle > len(angle_playlists):
         print(
             f"Invalid angle {angle} selected.",
@@ -114,27 +138,25 @@ def add_inputs(token, cmd, angle_playlists, angle):
     for angle_num, angle_pls in angle_playlists.items():
         if angle and angle_num != angle:
             continue
+        print(f"Extracting encryption keys for angle {angle_num}")
+        extract_enc_keys(angle_pls, token)
         # the -cookies flag is only recognized by ffmpeg when the input is via http
         # so we serve the hls playlist via an http server, and send that as input
-        cmd += cookies_arg + ("-i", DirServer.get_url(angle_pls))
+        cmd += cookies_arg + extra_arg + ("-i", DirServer.get_url("\n".join(angle_pls)))
 
-    if not angle:
-        # map all the input audio and video streams into separate tracks in output
-        cmd += chain.from_iterable(
-            ("-map", f"{i}:v:0") for i in range(len(angle_playlists))
-        )
-    else:
-        cmd.extend(("-map", "0:v:0"))
-    cmd.extend(("-map", "0:a:0"))  # get first audio stream (assuming all are in sync)
+    # map the input video streams into separate tracks in output
+    for i in range(bool(angle) or len(angle_playlists)):
+        cmd += ("-map", f"{i}:v:0")
+
+    cmd += ("-map", "0:a:0")  # get first audio stream (assuming all are in sync)
 
 
 def download_stream(token, stream_url, output_file: Path, quality="720p", angle=0):
+    print("Processing", output_file.name)
     cmd = [
         "ffmpeg",
         "-loglevel",
         "error",
-        "-protocol_whitelist",
-        "file,http,tcp,tls,crypto",
     ]
     variant_pls = get_variant_playlist(stream_url, quality)
     if not variant_pls:
@@ -145,7 +167,7 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
 
     cmd += ["-c", "copy", str(output_file)]
 
-    print("Downloading", output_file.name)
+    print("Downloading using ffmpeg")
     # TODO: Display ffmpeg download progress by parsing output
     proc = sp.run(cmd, text=True, **sp_args)
     if proc.returncode:
