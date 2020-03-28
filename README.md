@@ -45,6 +45,13 @@ In case you plan to use the script multiple times, it'll be useful to not have t
 * The GUI is made using [Gooey](https://github.com/chriskiehl/Gooey), which makes it dead simple to convert CLI Python apps to full featured GUIs.
 
 ## Help
+### Fixing URL unrecognized errors
+* For the course URL, you should specify a url of the *course*: `http://172.16.3.20/ilc/#/course/12345/678`. It will give an error if you write the url of a specific lecture.
+
+* If you are outside campus premises, you should replace `172.16.3.20` with either `a.impartus.com` or `bitshyd.impartus.com`, with everything else being the same. 
+
+* The url will be saved, and you can use dropdown in the future.
+
 ### Specifying Ranges
 The range pattern follows the format of Python Slices.
 ```
