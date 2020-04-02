@@ -131,7 +131,8 @@ def add_inputs(token, cmd, angle_playlists, angle):
     if angle > len(angle_playlists):
         print(
             f"Invalid angle {angle} selected.",
-            f"Downloading available angles: {', '.join(angle_playlists)}.",
+            f"Downloading available angles: {', '.join(map(str, angle_playlists))}.",
+            "(where 0=both, 1=right, 2=left)"
         )
         angle = 0
 
@@ -163,6 +164,11 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
         print("Some error while getting", stream_url)
         return
     angle_playlists = get_angle_playlists(variant_pls)
+
+    if not angle_playlists:
+        print("No video streams found")
+        return
+
     add_inputs(token, cmd, angle_playlists, angle)
 
     cmd += ["-c", "copy", str(output_file)]
