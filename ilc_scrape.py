@@ -263,6 +263,9 @@ def main():
         print_quit("Error fetching course info. Is the url proper?")
 
     lectures = response.json()
+    if not lectures:
+        print_quit("No lectures found. Is the url proper?")
+
     total_lecs = len(lectures)
     subject_name = "{subjectName} {sessionName}".format(**lectures[0])
     working_dir: Path = args.dest / subject_name
