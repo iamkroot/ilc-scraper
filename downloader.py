@@ -55,10 +55,12 @@ class DirServer(Process):
         self.server.serve_forever()
 
     @classmethod
-    def get_url(cls, file_content):
+    def get_url(cls, file_content, suffix=".m3u8", mode="w"):
         """Create a temp file with given contents and return its URL"""
+        if not cls._dir_server:
+            raise Exception("Dir server not initialized properly")
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".m3u8", dir=cls._dir_server.dir, delete=False
+            mode=mode, suffix=suffix, dir=cls._dir_server.dir, delete=False
         ) as f:
             f.write(file_content)
             name = Path(f.name).name
@@ -115,9 +117,8 @@ def extract_enc_keys(angle_pls: list, token):
         key_info = dict(parse_qsl(urlparse(key_url).query))
         orig_key = sess.get(key_url).content
         real_key = orig_key[::-1][:16]
-        tmp_path = TEMP_DIR_PATH / "{ttid}_{keyid}.key".format(**key_info)
-        tmp_path.write_bytes(real_key)
-        angle_pls[i] = PAT.sub(f'URI="{tmp_path.resolve().as_uri()}"', line)
+        path_uri = DirServer.get_url(real_key, ".key", "wb")
+        angle_pls[i] = PAT.sub(f'URI="{path_uri}"', line)
 
 
 def add_inputs(token, cmd, angle_playlists, angle):
