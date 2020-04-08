@@ -198,10 +198,14 @@ def login(username, password):
     except (requests.ConnectionError, requests.Timeout) as e:
         print_quit(f"Connection Error {e}")
     if response.status_code >= 500:
-        print_quit("Impartus not responding properly", 1)
+        print_quit("Impartus not responding properly")
+    elif response.status_code == 400:
+        print_quit("Invalid login request. Impartus changed something.")
+    elif response.status_code == 401:
+        print_quit("Invalid login credentials!")
     resp = response.json()
     if not resp["success"]:
-        print_quit("Impartus:" + resp["message"], 1)
+        print_quit(f"Impartus: {resp.get('message', resp)}", 1)
     return resp["token"]
 
 
