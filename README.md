@@ -63,6 +63,3 @@ The range pattern follows the format of Python Slices.
 
 You can also specify multiple ranges using commas. 
 `12, 4:6, 15:, :2` will download lectures 1, 4, 5, 12, 15, 16, 17, ... until the latest one.
-
-## Authors
-* [Krut Patel](https://github.com/iamkroot) 

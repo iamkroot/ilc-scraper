@@ -5,7 +5,7 @@ from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from multiprocessing.dummy import Process
 from pathlib import Path
-from urllib.parse import quote, parse_qsl, urlparse
+from urllib.parse import quote
 
 import requests
 from utils import find_startswith, sp_args
@@ -114,7 +114,6 @@ def extract_enc_keys(angle_pls: list, token):
         if not line.startswith("#EXT-X-KEY"):
             continue
         key_url = PAT.search(line)["key_url"]
-        key_info = dict(parse_qsl(urlparse(key_url).query))
         orig_key = sess.get(key_url).content
         real_key = orig_key[::-1][:16]
         path_uri = DirServer.get_url(real_key, ".key", "wb")
@@ -127,7 +126,7 @@ def add_inputs(token, cmd, angle_playlists, angle):
         "-allowed_extensions",
         "key,m3u8,ts",
         "-protocol_whitelist",
-        "file,http,tcp,tls,crypto",
+        "file,http,https,tcp,tls,crypto",
     )
     if angle > len(angle_playlists):
         print(
