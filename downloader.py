@@ -163,7 +163,10 @@ def download_stream(token, stream_url, output_file: Path, quality="720p", angle=
     if not variant_pls:
         print("Some error while getting", stream_url)
         return
-    angle_playlists = get_angle_playlists(variant_pls)
+    if "#EXT-X-KEY" in variant_pls:  # normal pre-recorded stream
+        angle_playlists = get_angle_playlists(variant_pls)
+    else:  # Unencrypted stream, probably live
+        angle_playlists = {1: variant_pls.splitlines()}
 
     if not angle_playlists:
         print("No video streams found")
