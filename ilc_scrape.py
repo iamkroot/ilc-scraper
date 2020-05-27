@@ -28,8 +28,7 @@ IMP_STREAM_URL = "api/fetchvideo?ttid={}&token={}&type=index.m3u8"
 IMP_LECTURES_URL = "api/subjects/{}/lectures/{}"
 
 CATALOG_PAT = re.compile(
-    r"(?P<base>(https?://)?((172\.16\.3\.20)|((a|bitshyd).impartus.com))/)"
-    r"ilc/#/course/(?P<subject>\d+)/(?P<lec>\d+)/?"
+    r"(?P<base>(https?://)?.+?/)ilc/#/course/(?P<subject>\d+)/(?P<lec>\d+)/?"
 )
 RANGE_PAT = re.compile(r"\s*(?P<l>\d*)(\s*:\s*(?P<r>\d*))?\s*")  # ignore spaces
 
@@ -55,7 +54,10 @@ def parse_args(config, course_api_urls=None):
     def validate_url(url):
         match = CATALOG_PAT.match(url)
         if not match:
-            raise ArgumentTypeError("URL doesn't match required pattern.")
+            raise ArgumentTypeError(
+                "URL doesn't match required pattern. "
+                "Should be like http://xyz.impartus.com/ilc/#/course/123456/789"
+            )
         return match["base"] + IMP_LECTURES_URL.format(match["subject"], match["lec"])
 
     creds = config.get("creds", {})
