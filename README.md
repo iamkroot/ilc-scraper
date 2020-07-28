@@ -16,7 +16,7 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 **Recommended:** Go to the [Releases](https://github.com/iamkroot/ilc-scraper/releases) page and download the latest version according to your OS. Just double click and run!
 
 **Manual method:**
-1. Ensure you have [Python 3.6](https://www.python.org/downloads/) or higher installed, and available in your system `PATH`. To check, run `python --version` from command line/terminal.
+1. Ensure you have [Python 3.7](https://www.python.org/downloads/) or higher installed, and available in your system `PATH`. To check, run `python --version` from command line/terminal.
 2. Install `ffmpeg` from [here](http://ffmpeg.org/download.html). Ensure it is in your PATH variable. To check, run `ffmpeg -version` from command line/terminal.
 3. Install [poetry](https://github.com/sdispater/poetry) using `pip install --user poetry`. Restart your PC.
 4. Clone this repo if you know git, or click [`Download as ZIP`](https://github.com/iamkroot/ilc-scraper/archive/master.zip) and extract it to some location.
