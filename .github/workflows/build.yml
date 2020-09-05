@@ -1,67 +1,86 @@
 name: Build and Release
 
-on:
-  push:
-    tags:
-      - 'v*'
+on: [push]
+  # push: '*'
+          # tags:
+          #- 'v*'
 
 jobs:
   build_and_release:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-16.04]
         include:
           - os: windows-latest
             artifact_name: ImpartusScraper.exe
             asset_name: impartus-scraper-windows.exe
-            venv_dir: "%USERPROFILE%\\.virtualenvs"
-          - os: ubuntu-16.04
+
+          - os: ubuntu-18.04
             artifact_name: ImpartusScraper
             asset_name: impartus-scraper-linux
-            venv_dir: $HOME/.virtualenvs
+
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
       with:
         fetch-depth: 1
+
     - name: Set up Python 3.7
-      uses: actions/setup-python@v1.1.1
+      uses: actions/setup-python@v2
       with:
-        python-version: '3.7'
+        python-version: 3.7
+
     - name: Install Poetry
-      uses: dschep/install-poetry-action@v1.2
+      uses: Gr1N/setup-poetry@v3
+
+    - name: Get poetry cache dir
+      id: poetry-cache-dir
+      run: echo "::set-output name=dir::$(poetry config cache-dir)"
+
     - name: Cache Poetry virtualenv
-      id: cache
-      uses: actions/cache@v1
+      id: poetry-cache
+      uses: actions/cache@v2
       with:
-        path: ~/.virtualenvs
+        path: ${{ steps.poetry-cache-dir.outputs.dir }}
         key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
           ${{ runner.os }}-poetry-
+
     - name: Install deps win
       if: runner.os == 'Windows'
       run: |
-        Invoke-WebRequest https://www.7-zip.org/a/7z1900-x64.exe -OutFile 7z.exe
-        Invoke-WebRequest https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip -OutFile ffmpeg.zip
+        # Download and extract FFmpeg, needs to be in PATH.
+        # Copy it to poetry dir so that it can be cached
+        # TODO: Compile ffmpeg manually to save space
+        iwr https://github.com/ShareX/FFmpeg/releases/download/v4.3.1/ffmpeg-4.3.1-win64.zip -OutFile ffmpeg.zip
+        Expand-Archive ffmpeg.zip -DestinationPath ${{ steps.poetry-cache-dir.outputs.dir }}
+        echo "::add-path::${{ steps.poetry-cache-dir.outputs.dir }}"
+        # iwr https://www.7-zip.org/a/7z1900-x64.exe -OutFile 7z.exe
         # Invoke-WebRequest https://github.com/upx/upx/releases/download/v3.95/upx-3.95-win64.zip -OutFile upx.zip
         # 7z.exe e upx.zip upx.exe -r
-        7z.exe e ffmpeg.zip ffmpeg.exe -r
-        echo "::add-path::%cd%"
+
     - name: Install deps ubuntu
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg pkg-config upx libgtk-3-dev
+        sudo add-apt-repository ppa:deadsnakes/ppa
+        sudo apt update
+        sudo apt install -y ffmpeg pkg-config upx make gcc libgtk-3-dev libwebkitgtk-dev libwebkitgtk-3.0-dev libgstreamer-gl1.0-0 freeglut3 freeglut3-dev python-gst-1.0 python3-gst-1.0 libglib2.0-dev ubuntu-restricted-extras libgstreamer-plugins-base1.0-dev python3.7-dev
         echo "::set-env name=ILC_SCRAPER_UPX::1"
-        echo "::add-path::$HOME/.local/bin"
-    - name: Set Poetry config
-      run: poetry config virtualenvs.path ${{ matrix.venv_dir }}
+
     - name: Setup virtualenv
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: poetry install -E gui
+      if: steps.poetry-cache.outputs.cache-hit != 'true'
+      run: |
+        # manually add wxpython wheel
+        if [[ $RUNNER_OS == "Linux" ]]; then
+          wx_ver=$(poetry show wxpython | awk '/^version/ {print $3}');
+          poetry run pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/${{ matrix.os }} "wxPython==$wx_ver";
+        fi
+        poetry install -E gui
+
     - name: Build file using pyinstaller
       run: poetry run pyinstaller build.spec
+
     - name: Upload to release
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: svenstaro/upload-release-action@v1-release
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
