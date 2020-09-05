@@ -113,6 +113,8 @@ def extract_enc_keys(angle_pls: list, token):
     for i, line in enumerate(angle_pls):
         if not line.startswith("#EXT-X-KEY"):
             continue
+        if line.startswith("#EXT-X-KEY:METHOD=NONE"):
+            continue
         key_url = PAT.search(line)["key_url"]
         orig_key = sess.get(key_url).content
         real_key = orig_key[::-1][:16]
