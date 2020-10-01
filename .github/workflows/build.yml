@@ -1,9 +1,9 @@
 name: Build and Release
 
-on: [push]
-  # push: '*'
-          # tags:
-          #- 'v*'
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build_and_release:
@@ -54,16 +54,13 @@ jobs:
         iwr https://github.com/ShareX/FFmpeg/releases/download/v4.3.1/ffmpeg-4.3.1-win64.zip -OutFile ffmpeg.zip
         Expand-Archive ffmpeg.zip -DestinationPath ${{ steps.poetry-cache-dir.outputs.dir }}
         echo "::add-path::${{ steps.poetry-cache-dir.outputs.dir }}"
-        # iwr https://www.7-zip.org/a/7z1900-x64.exe -OutFile 7z.exe
-        # Invoke-WebRequest https://github.com/upx/upx/releases/download/v3.95/upx-3.95-win64.zip -OutFile upx.zip
-        # 7z.exe e upx.zip upx.exe -r
 
     - name: Install deps ubuntu
       if: runner.os == 'Linux'
       run: |
-        sudo add-apt-repository ppa:deadsnakes/ppa
+        # TODO: Compile ffmpeg manually to save space
         sudo apt update
-        sudo apt install -y ffmpeg pkg-config upx make gcc libgtk-3-dev libwebkitgtk-dev libwebkitgtk-3.0-dev libgstreamer-gl1.0-0 freeglut3 freeglut3-dev python-gst-1.0 python3-gst-1.0 libglib2.0-dev ubuntu-restricted-extras libgstreamer-plugins-base1.0-dev python3.7-dev
+        sudo apt install -y ffmpeg pkg-config upx libgtk-3-dev
         echo "::set-env name=ILC_SCRAPER_UPX::1"
 
     - name: Setup virtualenv
