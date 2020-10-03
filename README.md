@@ -6,14 +6,16 @@ This is a scraper for the Impartus Lecture Capture system deployed in BITS Pilan
 * Awesome GUI!
 	![GUI](assets/screenshot.png)
 * Download lectures without subscribing to them.
-* **NEW:** Download BOTH the camera views. (Saved as video tracks in output file)
+* Download BOTH the camera views. (Saved as video tracks in output file)
 * Specify ranges to limit the lectures to be downloaded.
 * Fuzzy searching of course names.
 * Skips already downloaded lectures.
 * Multiprocessing support.
 
 ## Installation
-**Recommended:** Go to the [Releases](https://github.com/iamkroot/ilc-scraper/releases) page and download the latest version according to your OS. Just double click and run!
+**Recommended:** 
+
+Go to the [Releases](https://github.com/iamkroot/ilc-scraper/releases) page and download the latest version according to your OS. Just double click and run!
 
 **Manual method:**
 1. Ensure you have [Python 3.7](https://www.python.org/downloads/) or higher installed, and available in your system `PATH`. To check, run `python --version` from command line/terminal.
@@ -63,3 +65,6 @@ The range pattern follows the format of Python Slices.
 
 You can also specify multiple ranges using commas. 
 `12, 4:6, 15:, :2` will download lectures 1, 4, 5, 12, 15, 16, 17, ... until the latest one.
+
+## Contributing
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
