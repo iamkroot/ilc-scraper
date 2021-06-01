@@ -10,6 +10,7 @@ repository = "https://github.com/iamkroot/ilc-scraper"
 python = "^3.6"
 requests = "^2.22"
 gooey = { version = "^1.0", optional = true }
+pathvalidate = "^2.4.1"
 
 [tool.poetry.extras]
 gui = ["gooey"]

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import requests
 from downloader import DirServer, download_stream
 from utils import print_quit, read_json, sanitize_filepath, sp_args, store_json
+from pathvalidate import sanitize_filename
 
 try:
     from gooey import Gooey, GooeyParser
@@ -273,7 +274,9 @@ def main():
         print_quit("No lectures found. Is the url proper?")
 
     total_lecs = len(lectures)
-    subject_name = "{subjectName} {sessionName}".format(**lectures[0])
+    subject_name = sanitize_filename(
+        "{subjectName} {sessionName}".format(**lectures[0])
+    )
     working_dir: Path = args.dest / subject_name
     working_dir.mkdir(exist_ok=True, parents=True)
     print(f'Saving to "{working_dir}"')
