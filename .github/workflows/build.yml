@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build_and_release:
@@ -15,9 +16,10 @@ jobs:
             artifact_name: ImpartusScraper.exe
             asset_name: impartus-scraper-windows.exe
 
-          - os: ubuntu-18.04
-            artifact_name: ImpartusScraper
-            asset_name: impartus-scraper-linux
+          # disabled because it's very finicky
+          # - os: ubuntu-18.04
+          #   artifact_name: ImpartusScraper
+          #   asset_name: impartus-scraper-linux
 
     steps:
     - uses: actions/checkout@v2
@@ -30,7 +32,7 @@ jobs:
         python-version: 3.7
 
     - name: Install Poetry
-      uses: Gr1N/setup-poetry@v3
+      uses: Gr1N/setup-poetry@v4
 
     - name: Get poetry cache dir
       id: poetry-cache-dir
@@ -46,14 +48,16 @@ jobs:
           ${{ runner.os }}-poetry-
 
     - name: Install deps win
-      if: runner.os == 'Windows'
+      if: runner.os == 'Windows' && steps.poetry-cache.outputs.cache-hit != 'true'
       run: |
         # Download and extract FFmpeg, needs to be in PATH.
         # Copy it to poetry dir so that it can be cached
         # TODO: Compile ffmpeg manually to save space
         iwr https://github.com/ShareX/FFmpeg/releases/download/v4.3.1/ffmpeg-4.3.1-win64.zip -OutFile ffmpeg.zip
         Expand-Archive ffmpeg.zip -DestinationPath ${{ steps.poetry-cache-dir.outputs.dir }}
-        echo "::add-path::${{ steps.poetry-cache-dir.outputs.dir }}"
+
+    - if: runner.os == 'Windows'
+      run: echo ${{ steps.poetry-cache-dir.outputs.dir }} | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Install deps ubuntu
       if: runner.os == 'Linux'
@@ -61,24 +65,31 @@ jobs:
         # TODO: Compile ffmpeg manually to save space
         sudo apt update
         sudo apt install -y ffmpeg pkg-config upx libgtk-3-dev
-        echo "::set-env name=ILC_SCRAPER_UPX::1"
+        echo "ILC_SCRAPER_UPX=1" >> $GITHUB_ENV
 
-    - name: Setup virtualenv
-      if: steps.poetry-cache.outputs.cache-hit != 'true'
+    - name: Pre setup venv
+      if: runner.os == 'Linux' && steps.poetry-cache.outputs.cache-hit != 'true'
       run: |
         # manually add wxpython wheel
-        if [[ $RUNNER_OS == "Linux" ]]; then
-          wx_ver=$(poetry show wxpython | awk '/^version/ {print $3}');
-          poetry run pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/${{ matrix.os }} "wxPython==$wx_ver";
-        fi
-        poetry install -E gui
+        wx_ver=$(poetry show wxpython | awk '/^version/ {print $3}');
+        poetry run pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/${{ matrix.os }} "wxPython==$wx_ver";
+
+    - name: Install python deps
+      if: steps.poetry-cache.outputs.cache-hit != 'true'
+      run: poetry install -E gui
 
     - name: Build file using pyinstaller
       run: poetry run pyinstaller build.spec
 
+    - name: Upload to artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ matrix.asset_name }}
+        path: dist/${{ matrix.artifact_name }}
+
     - name: Upload to release
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: svenstaro/upload-release-action@v1-release
+      uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist/${{ matrix.artifact_name }}
